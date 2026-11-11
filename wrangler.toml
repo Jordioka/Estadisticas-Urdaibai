@@ -7,5 +7,5 @@ pages_build_output_dir = "public"
 binding = "DB"
 database_name = "urdaibai-stats"
 # Sustituye por el identificador que te da `npx wrangler d1 create urdaibai-stats`
-database_id = "PEGA-AQUI-EL-ID-DE-TU-BASE-DE-DATOS"
+database_id = "24fbe05b-9a65-4c5e-a013-a944612e7d97"
 migrations_dir = "migrations"
