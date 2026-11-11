@@ -154,8 +154,8 @@ button.counter { cursor: pointer; }
 .court-line { fill: none; stroke: #2a2f35; stroke-width: .16; } .court-line.dashed { stroke-dasharray: .5 .35; }
 .court-goal { fill: #fff; stroke: #2a2f35; stroke-width: .2; }
 .zone { fill: #F4FBF8; stroke: #8DB5A8; stroke-width: .08; cursor: pointer; } .zone:hover { fill: #E3F7EF; }
-.zone.selected { fill: var(--teal); stroke: var(--red-btn); stroke-width: .22; } .zone.heat { fill: var(--red); stroke: #8DB5A8; }
-.zone.seven { fill: #fff; stroke: #2a2f35; stroke-width: .12; } .zone.seven.selected { fill: var(--teal); stroke: var(--red-btn); stroke-width: .22; }
+.zone.selected { fill: var(--teal) !important; fill-opacity: 1 !important; stroke: #1A1D21; stroke-width: .14; } .zone.heat { fill: var(--red); stroke: #8DB5A8; }
+.zone.seven { fill: #fff; stroke: #2a2f35; stroke-width: .12; } .zone.seven.selected { fill: var(--teal) !important; stroke: #1A1D21; stroke-width: .18; }
 .zone-label { font-size: 1.05px; font-weight: 700; fill: #1A1D21; pointer-events: none; } .zone-count { font-size: .95px; font-weight: 700; fill: #1A1D21; pointer-events: none; }
 .goal-wrap { max-width: 300px; margin: 8px auto; }
 .goal-frame { padding: 9px 9px 0; border-radius: 12px 12px 0 0; background: repeating-linear-gradient(90deg, #E8140C 0 16px, #fff 16px 32px); }
@@ -205,3 +205,5 @@ td.g-strong { background: var(--strong-bg); } td.g-light { background: var(--lig
 .usage-card { background: #fff; border: 1px solid var(--line-soft); border-radius: 14px; padding: 12px 14px; margin: 10px 0; } .usage-card h3 { margin: 0; font-size: 1rem; }
 .usage-big { font-size: 1.15rem; margin: 6px 0; } .usage-big strong { font-size: 1.7rem; }
 .meter { height: 14px; border-radius: 8px; background: #E8ECEF; overflow: hidden; border: 1px solid var(--line-soft); } .meter-fill { height: 100%; } .meter-fill.g-strong { background: var(--strong); } .meter-fill.g-mid { background: var(--mid); } .meter-fill.g-bad { background: var(--bad); }
+
+.area6 { fill: #E4ECEF; } .zone-pick { text-align: center; font-weight: 700; margin: 4px 0 0; min-height: 1.5em; color: var(--muted); } .zone-pick.on { color: var(--ink); }

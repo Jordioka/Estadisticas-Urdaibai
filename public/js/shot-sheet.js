@@ -52,7 +52,7 @@ export function openShotSheet(opts) {
     onCell: (n) => { sel.cell = n; sel.out = null; if (sel.outcome && OUTS.includes(sel.outcome)) sel.outcome = null; refresh(); },
     onOut: (k) => { sel.out = k; sel.cell = null; sel.outcome = k; refresh(true); },
   });
-  const caBtn = h('button', { type: 'button', class: 'btn ca-btn', onclick: () => { sel.zone = 'CA'; refresh(true); } }, t('zone.CA'));
+  const zoneName = h('p', { class: 'zone-pick', 'aria-live': 'polite' });
 
   function finish(outcome) {
     if (saving) return;
@@ -94,7 +94,8 @@ export function openShotSheet(opts) {
         : h('p', { class: 'muted small' }, t('shot.no_keepers_hint')));
     court.update({ selected: sel.zone });
     goal.update({ cell: sel.cell, out: sel.out });
-    caBtn.classList.toggle('on', sel.zone === 'CA');
+    zoneName.textContent = sel.zone ? t(`zone.${sel.zone}`) : t('shot.step_zone');
+    zoneName.classList.toggle('on', !!sel.zone);
 
     // zona + portería completas → resultado
     finalBox.replaceChildren();
@@ -129,7 +130,7 @@ export function openShotSheet(opts) {
     body: [personBox, h('h3', null, t('shot.zone')), courtBox, h('h3', null, t('shot.goal')), goalBox, finalBox,
       h('details', { class: 'more' }, h('summary', null, t('shot.more')), moreBox)],
   });
-  courtBox.append(court, h('div', { class: 'center' }, caBtn));
+  courtBox.append(court, zoneName);
   goalBox.append(goal);
   renderMore();
   refresh();

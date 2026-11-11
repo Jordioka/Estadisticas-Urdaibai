@@ -22,9 +22,9 @@ export const OWN_SHOT_TYPES = ['goal', 'shot_miss'];
 export const AGAINST_SHOT_TYPES = ['goal_against', 'save', 'shot_against_miss'];
 export const SHOT_TYPES_ALL = [...OWN_SHOT_TYPES, ...AGAINST_SHOT_TYPES];
 
-export const ZONES = ['EI', '9I', '9C', '9D', 'ED', '6M', '7M', 'CA', 'MI', 'MC', 'MD']; // M* = entre la línea de 6 m y la de 9 m
+export const ZONES = ['EI', 'ED', '6I', '6C', '6D', '7M', '9I', '9C', '9D', '6M', 'CA']; // 6M y CA: solo datos antiguos/importados (ya no se pulsan en el campo)
 // Grupos de zonas para los informes: 6 m, Extremos, 7 m y 9 m (+ contraataque)
-export const ZONE_GROUPS = { six: ['6M'], mid: ['MI', 'MC', 'MD'], wings: ['EI', 'ED'], seven: ['7M'], nine: ['9I', '9C', '9D'], fast: ['CA'] };
+export const ZONE_GROUPS = { six: ['6I', '6C', '6D', '6M'], wings: ['EI', 'ED'], seven: ['7M'], nine: ['9I', '9C', '9D'], fast: ['CA'] };
 export function groupStats(zones) {
   const out = { own: {}, against: {} };
   for (const [g, list] of Object.entries(ZONE_GROUPS)) {
