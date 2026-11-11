@@ -11,7 +11,11 @@ class Stmt {
   bind(...p) { return new Stmt(this.db, this.sql, p); }
   async first() { return this.db.prepare(this.sql).get(...this.p) ?? null; }
   async all() { return { results: this.db.prepare(this.sql).all(...this.p) }; }
-  async run() { const r = this.db.prepare(this.sql).run(...this.p); return { success: true, meta: { changes: Number(r.changes) } }; }
+  async run() {
+    const r = this.db.prepare(this.sql).run(...this.p);
+    const size = this.db.prepare('SELECT page_count * page_size AS s FROM pragma_page_count, pragma_page_size').get()?.s;
+    return { success: true, meta: { changes: Number(r.changes), rows_written: Number(r.changes), size_after: size } };
+  }
 }
 
 export function createD1(path = ':memory:') {

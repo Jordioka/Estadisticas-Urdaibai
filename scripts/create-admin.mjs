@@ -10,5 +10,5 @@ if (!username || !password || password.length < 6) {
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
 const hash = await hashPassword(password);
 console.log(
-  `INSERT INTO users (id, username, name, pass_hash, role, all_teams, active, created_at) VALUES (${q(uuid())}, ${q(username)}, ${q(username)}, ${q(hash)}, 'admin', 1, 1, ${q(nowIso())});`
+  `INSERT INTO users (id, username, name, pass_hash, role, all_teams, is_owner, active, created_at) VALUES (${q(uuid())}, ${q(username)}, ${q(username)}, ${q(hash)}, 'admin', 1, 1, 1, ${q(nowIso())});`
 );

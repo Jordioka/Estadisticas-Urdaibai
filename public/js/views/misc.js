@@ -36,6 +36,7 @@ export function moreView(root, { logout, rerender }) {
     h('div', { class: 'menu' },
       item('#/import', t('imp.title'), '⬆'),
       state.user.role === 'admin' ? item('#/admin', t('admin.title'), '⚙') : null,
+      state.user.is_owner ? item('#/usage', t('usage.title'), '◔') : null,
       item('#/help', t('help.title'), '?')),
     h('div', { class: 'row-between' }, h('span', null, t('more.language')), langToggle(rerender)),
     h('button', { class: 'btn', type: 'button', onclick: logout }, t('more.logout'))));

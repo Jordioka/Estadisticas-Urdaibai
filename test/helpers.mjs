@@ -8,10 +8,10 @@ export async function makeApp() {
   const ids = { n: 0 };
   const newId = (p = 'id') => `${p}-${String(++ids.n).padStart(6, '0')}-${uuid().slice(0, 8)}`;
 
-  async function seedUser(username, password, { role = 'scorer', all_teams = 0 } = {}) {
+  async function seedUser(username, password, { role = 'scorer', all_teams = 0, is_owner = 0 } = {}) {
     const id = uuid();
-    d1.raw.prepare("INSERT INTO users (id, username, name, pass_hash, role, all_teams, active, created_at) VALUES (?,?,?,?,?,?,1,?)")
-      .run(id, username, username, await hashPassword(password), role, all_teams, nowIso());
+    d1.raw.prepare("INSERT INTO users (id, username, name, pass_hash, role, all_teams, is_owner, active, created_at) VALUES (?,?,?,?,?,?,?,1,?)")
+      .run(id, username, username, await hashPassword(password), role, all_teams, is_owner, nowIso());
     return id;
   }
 

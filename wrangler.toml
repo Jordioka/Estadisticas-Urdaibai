@@ -3,9 +3,12 @@ name = "urdaibai-stats"
 compatibility_date = "2025-01-01"
 pages_build_output_dir = "public"
 
+# Repositorio de GitHub cuyo tamaño se muestra en la pantalla de uso (solo funciona si es público)
+[vars]
+GITHUB_REPO = "Jordioka/Estadisticas-Urdaibai"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "urdaibai-stats"
-# Sustituye por el identificador que te da `npx wrangler d1 create urdaibai-stats`
 database_id = "24fbe05b-9a65-4c5e-a013-a944612e7d97"
 migrations_dir = "migrations"

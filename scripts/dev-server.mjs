@@ -18,7 +18,7 @@ const admin = (process.env.DEV_ADMIN ?? 'admin:admin123');
 if (admin) {
   const [u, p] = admin.split(':');
   if (!d1.raw.prepare('SELECT 1 FROM users WHERE username = ?').get(u))
-    d1.raw.prepare("INSERT INTO users (id, username, name, pass_hash, role, all_teams, active, created_at) VALUES (?,?,?,?,'admin',1,1,?)")
+    d1.raw.prepare("INSERT INTO users (id, username, name, pass_hash, role, all_teams, is_owner, active, created_at) VALUES (?,?,?,?,'admin',1,1,1,?)")
       .run(uuid(), u, u, await hashPassword(p), nowIso());
 }
 

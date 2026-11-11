@@ -17,6 +17,7 @@ en **euskera** (por defecto) y **castellano**.
 - **Permisos por equipo**: cada usuario solo ve y anota los equipos que le asigna el administrador (uno, varios o todos). Se comprueba siempre en el servidor.
 - **Importar** jugadores y estadísticas (simples o avanzadas) desde CSV o Excel con vista previa, lista de errores y decisión sobre duplicados; plantillas descargables. **Exportar** a Excel y CSV.
 - **Informes** por partido, por partidos (tabla + gráfico de evolución) y por temporada (totales, mejores/peores, jugadores, porteros, mapas de zonas y portería); PDF con *Imprimir → Guardar como PDF*.
+- **Uso del plan gratuito** (*Más → Uso del plan gratuito*): solo lo ve el **propietario** (el primer administrador creado), aunque haya más administradores. Muestra el porcentaje que queda de peticiones diarias, filas leídas/escritas y tamaño de la base de datos de Cloudflare, y el tamaño del repositorio de GitHub.
 - Correcciones fáciles: deshacer, lista de eventos editable, reabrir/editar partidos, papelera recuperable, registro de cambios, temporadas cerrables, partidos de prueba (no cuentan en informes).
 
 ## Estructura
@@ -100,11 +101,20 @@ Abre la dirección `https://<tu-proyecto>.pages.dev`, entra con el administrador
 
 Cada vez que hagas *push* a GitHub, Cloudflare vuelve a publicar la web automáticamente. Las migraciones nuevas de `migrations/` se aplican con el comando del paso 3.
 
+## Actualizar una instalación que ya está publicada
+
+Cuando recibas una versión nueva con archivos nuevos en `migrations/`, el orden importa:
+
+1. **Primero** aplica las migraciones a la base de datos: `npx wrangler d1 migrations apply urdaibai-stats --remote`
+2. **Después** sube los archivos a GitHub (Cloudflare republica solo).
+
+Si lo haces al revés, la web puede dar error hasta que se aplique la migración.
+
 ## Notas importantes
 
 - **Euskera**: los textos en euskera (`public/js/strings.js`, segunda columna de cada entrada) deben ser **revisados por una persona euskaldun** del club antes de usarlos en serio.
 - **PDF**: se genera con la función del navegador (*PDF / imprimir → Guardar como PDF*); no hay servidor que lo cree.
-- **Límites gratuitos de Cloudflare** (orientativos, comprueba los vigentes): 100.000 peticiones/día de Functions y 5 GB en D1. Un club con varios equipos queda muy lejos de esos límites.
+- **Límites gratuitos de Cloudflare** (orientativos, comprueba los vigentes; la pantalla de uso los lee de `FREE_LIMITS` en `server/api.js`): 100.000 peticiones/día de Functions, 5 millones de filas leídas y 100.000 escritas al día en D1, y 5 GB de base de datos. Un club con varios equipos queda muy lejos de esos límites.
 - **Seguridad**: contraseñas con PBKDF2-SHA256, sesiones en base de datos con cookie `HttpOnly`, bloqueo tras 5 intentos fallidos en 10 minutos, comprobación de origen contra CSRF y cabeceras de seguridad (`public/_headers`). Todo el contenido requiere iniciar sesión.
 - **Copia de seguridad**: `npx wrangler d1 export urdaibai-stats --remote --output copia.sql`. Los informes también se pueden exportar a Excel.
 - **Si cambias archivos de `public/`** y la app instalada no muestra los cambios, sube el número de `VERSION` en `public/sw.js`.

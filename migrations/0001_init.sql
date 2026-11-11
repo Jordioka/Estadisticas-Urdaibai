@@ -84,7 +84,7 @@ CREATE TABLE events (
   minute INTEGER,
   player_id TEXT REFERENCES players(id),
   goalkeeper_id TEXT REFERENCES players(id),
-  zone TEXT,                          -- EI, ED, 6M, 9I, 9C, 9D, 7M, CA
+  zone TEXT,                          -- EI, ED, 6M, MI, MC, MD (entre 6 y 9 m), 9I, 9C, 9D, 7M, CA
   goal_cell INTEGER,                  -- 1..9 (cuadrícula de la portería)
   result TEXT,                        -- para shot_miss / shot_against_miss: save, out, post, block
   shot_type TEXT,

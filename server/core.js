@@ -15,14 +15,18 @@ export const uuid = () => crypto.randomUUID();
 
 // ---------- Base de datos (D1) ----------
 export function makeDb(d1) {
+  // Acumula lo que consume cada petición (filas leídas/escritas) para la pantalla de uso del propietario.
+  const usage = { read: 0, written: 0 };
+  const count = (meta) => { if (meta) { usage.read += meta.rows_read || 0; usage.written += meta.rows_written || 0; } };
   const prep = (sql, p) => d1.prepare(sql).bind(...p.map((v) => (v === undefined ? null : v)));
   return {
     raw: d1,
+    usage,
     stmt: (sql, ...p) => prep(sql, p),
-    all: async (sql, ...p) => (await prep(sql, p).all()).results || [],
-    first: async (sql, ...p) => (await prep(sql, p).first()) || null,
-    run: async (sql, ...p) => prep(sql, p).run(),
-    batch: async (stmts) => d1.batch(stmts),
+    all: async (sql, ...p) => { const r = await prep(sql, p).all(); count(r.meta); return r.results || []; },
+    first: async (sql, ...p) => { usage.read += 1; return (await prep(sql, p).first()) || null; },
+    run: async (sql, ...p) => { const r = await prep(sql, p).run(); count(r.meta); return r; },
+    batch: async (stmts) => { const r = await d1.batch(stmts); for (const x of r || []) count(x.meta); return r; },
   };
 }
 
@@ -112,6 +116,10 @@ export async function audit(ctx, action, entity, entityId, detail) {
     'INSERT INTO audit_log (at, user_id, action, entity, entity_id, detail) VALUES (?,?,?,?,?,?)',
     nowIso(), ctx.user?.id ?? null, action, entity ?? null, entityId ?? null, detail == null ? null : JSON.stringify(detail).slice(0, 1000)
   );
+}
+
+export function requireOwner(ctx) {
+  if (!ctx.user.is_owner) throw new HttpError(403, 'forbidden');
 }
 
 export function requireAdmin(ctx) {

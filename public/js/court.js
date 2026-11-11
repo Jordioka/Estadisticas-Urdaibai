@@ -8,13 +8,20 @@ const pt = (r, a) => [+(r * Math.cos(deg(a))).toFixed(3), +(r * Math.sin(deg(a))
 // Sectores alrededor del centro de la portería (el eje y baja desde la línea de gol)
 // Agrupación: Extremos (EI, ED) · 9 m (9I, 9C, 9D, desde la línea de 6 m hacia fuera) · 6 m (dentro del área, se dibuja encima)
 const SECTORS = [
-  { z: 'EI', r1: 0, r2: 15, a1: 152, a2: 180, label: 'EI', at: [-8.9, 3] },
-  { z: 'ED', r1: 0, r2: 15, a1: 0, a2: 28, label: 'ED', at: [8.9, 3] },
+  { z: 'EI', r1: 0, r2: 15, a1: 152, a2: 180, label: 'EI', at: [-8.9, 1.0] },
+  { z: 'ED', r1: 0, r2: 15, a1: 0, a2: 28, label: 'ED', at: [8.9, 1.0] },
   { z: '9D', r1: 0, r2: 15, a1: 28, a2: 68, label: '9D', at: [6.6, 10.4] },
-  { z: '9C', r1: 0, r2: 15, a1: 68, a2: 112, label: '9C', at: [0, 11.6] },
+  { z: '9C', r1: 0, r2: 15, a1: 68, a2: 112, label: '9C', at: [0, 10.5] },
   { z: '9I', r1: 0, r2: 15, a1: 112, a2: 152, label: '9I', at: [-6.6, 10.4] },
 ];
 const AREA6 = 'M-7.5 0 A6 6 0 0 0 -1.5 6 L1.5 6 A6 6 0 0 0 7.5 0 Z';
+const AREA9 = 'M-10.5 0 A9 9 0 0 0 -1.5 9 L1.5 9 A9 9 0 0 0 10.5 0 Z';
+// Franja entre la línea de 6 m y la de 9 m (se recorta con el área de 9 m)
+const MID = [
+  { z: 'MD', a1: 28, a2: 68, at: [5.3, 5.9] },
+  { z: 'MC', a1: 68, a2: 112, at: [-1.95, 7.2] },
+  { z: 'MI', a1: 112, a2: 152, at: [-5.3, 5.9] },
+];
 
 function sectorPath({ r1, r2, a1, a2 }) {
   const [x1, y1] = pt(r2, a1), [x2, y2] = pt(r2, a2);
@@ -33,12 +40,13 @@ export function courtSVG(opts = {}) {
   const root = svg('svg', { viewBox: '-10.4 -1.6 20.8 14.6', class: 'court', role: 'group', 'aria-label': t('court.label') });
   const clip = svg('clipPath', { id: `clip-${Math.random().toString(36).slice(2, 7)}` }, svg('rect', { x: -10, y: 0, width: 20, height: 13 }));
   const clipId = clip.getAttribute('id');
-  root.append(svg('defs', null, clip));
+  root.append(svg('defs', null, clip, svg('clipPath', { id: `${clipId}-9` }, svg('path', { d: AREA9 }))));
   root.append(svg('rect', { x: -10, y: 0, width: 20, height: 13, class: 'court-floor' }));
   const zones = {};
   const g = svg('g', { 'clip-path': `url(#${clipId})` });
-  const mkZone = (z, d, label, cxy) => {
-    const p = svg('path', { d, class: 'zone', 'data-zone': z, role: 'button', tabindex: 0, 'aria-label': t(`zone.${z}`) });
+  const texts = svg('g', { 'pointer-events': 'none' }); // los textos van encima de todas las zonas
+  const mkZone = (z, d, label, cxy, clip9) => {
+    const p = svg('path', { d, class: 'zone', ...(clip9 ? { 'clip-path': `url(#${clipId}-9)` } : {}), 'data-zone': z, role: 'button', tabindex: 0, 'aria-label': t(`zone.${z}`) });
     const txt = svg('text', { x: cxy[0], y: cxy[1], class: 'zone-label', 'text-anchor': 'middle', 'dominant-baseline': 'middle' }, label);
     const sub = svg('text', { x: cxy[0], y: cxy[1] + 1.35, class: 'zone-count', 'text-anchor': 'middle', 'dominant-baseline': 'middle' });
     zones[z] = { p, sub };
@@ -46,9 +54,11 @@ export function courtSVG(opts = {}) {
       p.addEventListener('click', () => opts.onSelect(z));
       p.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); opts.onSelect(z); } });
     }
-    return [p, txt, sub];
+    texts.append(txt, sub);
+    return [p];
   };
   for (const s of SECTORS) g.append(...mkZone(s.z, sectorPath(s), s.label, s.at));
+  for (const m of MID) g.append(...mkZone(m.z, sectorPath({ r1: 0, r2: 15, a1: m.a1, a2: m.a2 }), '6-9', m.at, true));
   g.append(svg('path', { d: AREA6, fill: '#fff', 'pointer-events': 'none' }));
   g.append(...mkZone('6M', AREA6, '6 m', [0, 2.3]));
   root.append(g);
@@ -60,15 +70,15 @@ export function courtSVG(opts = {}) {
   root.append(svg('rect', { x: -10, y: 0, width: 20, height: 13, class: 'court-border', 'pointer-events': 'none' }));
   root.append(svg('rect', { x: -1.5, y: -1.1, width: 3, height: 1.1, class: 'court-goal', 'pointer-events': 'none' }));
   // 7 m: punto pulsable
-  const seven = svg('circle', { cx: 0, cy: 7, r: 1.25, class: 'zone seven', 'data-zone': '7M', role: 'button', tabindex: 0, 'aria-label': t('zone.7M') });
-  const sevenTxt = svg('text', { x: 0, y: 7, class: 'zone-label', 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'pointer-events': 'none' }, '7m');
-  const sevenSub = svg('text', { x: 0, y: 8.7, class: 'zone-count', 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'pointer-events': 'none' });
+  const seven = svg('circle', { cx: 0, cy: 6.9, r: 1.0, class: 'zone seven', 'data-zone': '7M', role: 'button', tabindex: 0, 'aria-label': t('zone.7M') });
+  const sevenTxt = svg('text', { x: 0, y: 6.9, class: 'zone-label', 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'pointer-events': 'none' }, '7m');
+  const sevenSub = svg('text', { x: 0, y: 8.4, class: 'zone-count', 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'pointer-events': 'none' });
   zones['7M'] = { p: seven, sub: sevenSub };
   if (opts.onSelect) {
     seven.addEventListener('click', () => opts.onSelect('7M'));
     seven.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); opts.onSelect('7M'); } });
   }
-  root.append(seven, sevenTxt, sevenSub);
+  root.append(seven, sevenTxt, sevenSub, texts);
 
   const wrap = h('div', { class: 'court-wrap' }, root);
   const update = ({ selected, counts, heat } = {}) => {

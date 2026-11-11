@@ -10,6 +10,7 @@ import { playersView } from './views/players.js';
 import { importView } from './views/import.js';
 import { reportsView } from './views/reports.js';
 import { adminView } from './views/admin.js';
+import { usageView } from './views/usage.js';
 import { loginView, moreView, helpView, tutorial, langToggle } from './views/misc.js';
 
 const app = document.getElementById('app');
@@ -53,7 +54,7 @@ export async function route() {
   const key = name || 'home';
   shell.main.replaceChildren();
   document.body.dataset.route = IMMERSIVE.has(key) ? 'immersive' : key;
-  shell.nav.querySelectorAll('a').forEach((el) => el.classList.toggle('on', el.dataset.key === (['import', 'admin', 'help'].includes(key) ? 'more' : key === 'home' || key === 'summary' ? '' : key)));
+  shell.nav.querySelectorAll('a').forEach((el) => el.classList.toggle('on', el.dataset.key === (['import', 'admin', 'help', 'usage'].includes(key) ? 'more' : key === 'home' || key === 'summary' ? '' : key)));
   shell.nav.querySelector('a[data-key=""]')?.classList.toggle('on', key === 'home' || key === 'summary');
   window.scrollTo(0, 0);
   try {
@@ -66,6 +67,7 @@ export async function route() {
       case 'import': importView(shell.main, params); break;
       case 'reports': reportsView(shell.main); break;
       case 'admin': adminView(shell.main, { section: a }); break;
+      case 'usage': await usageView(shell.main); break;
       case 'more': moreView(shell.main, { logout, rerender: () => route() }); break;
       case 'help': helpView(shell.main); break;
       default: location.hash = '#/';

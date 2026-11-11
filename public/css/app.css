@@ -201,3 +201,7 @@ td.g-strong { background: var(--strong-bg); } td.g-light { background: var(--lig
 @media (min-width: 700px) { .page { padding-top: 24px; } .acts { gap: 14px; } }
 
 .zg-table { margin: 8px 0 2px; } .zg-table td:first-child { font-weight: 600; }
+
+.usage-card { background: #fff; border: 1px solid var(--line-soft); border-radius: 14px; padding: 12px 14px; margin: 10px 0; } .usage-card h3 { margin: 0; font-size: 1rem; }
+.usage-big { font-size: 1.15rem; margin: 6px 0; } .usage-big strong { font-size: 1.7rem; }
+.meter { height: 14px; border-radius: 8px; background: #E8ECEF; overflow: hidden; border: 1px solid var(--line-soft); } .meter-fill { height: 100%; } .meter-fill.g-strong { background: var(--strong); } .meter-fill.g-mid { background: var(--mid); } .meter-fill.g-bad { background: var(--bad); }

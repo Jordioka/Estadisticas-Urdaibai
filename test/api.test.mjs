@@ -235,3 +235,19 @@ test('los umbrales los edita el administrador y se validan', async () => {
   assert.equal((await s.admin('PUT', '/api/settings/thresholds', { ...t, save_pct: { green_gt: 0.35, orange_gte: 0.28 } })).status, 200);
   assert.equal((await s.onlyA('GET', '/api/bootstrap')).data.thresholds.save_pct.green_gt, 0.35);
 });
+
+test('pantalla de uso: solo el propietario, aunque haya otros administradores', async () => {
+  const { makeApp } = await import('./helpers.mjs');
+  const app = await makeApp();
+  await app.seedUser('jefe', 'pass123', { role: 'admin', all_teams: 1, is_owner: 1 });
+  await app.seedUser('otroadmin', 'pass123', { role: 'admin', all_teams: 1 });
+  const owner = app.client(); await owner.login('jefe', 'pass123');
+  const other = app.client(); await other.login('otroadmin', 'pass123');
+  assert.equal((await other('GET', '/api/usage')).status, 403);
+  const r = await owner('GET', '/api/usage');
+  assert.equal(r.status, 200);
+  assert.ok(r.data.today.requests >= 1, 'las peticiones se cuentan');
+  assert.ok(r.data.limits.requests > 0);
+  assert.equal((await owner('GET', '/api/bootstrap')).data.user.is_owner, true);
+  assert.equal((await other('GET', '/api/bootstrap')).data.user.is_owner, false);
+});

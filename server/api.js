@@ -2,7 +2,7 @@
 import { CONTRIB, COUNTERS, DEFAULT_THRESHOLDS, isIsoDate, emptyCounters } from '../public/js/stats.js';
 import {
   HttpError, makeDb, nowIso, uuid, hashPassword, verifyPassword, sha256Hex, randomToken, cleanStr, placeholders,
-  loadAccess, canTeam, accessibleTeams, audit, requireAdmin, ensureSeason, validId,
+  loadAccess, canTeam, accessibleTeams, audit, requireAdmin, requireOwner, ensureSeason, validId,
 } from './core.js';
 import { applyOps } from './ops.js';
 import { importPlayers, importMatches } from './imports.js';
@@ -38,7 +38,7 @@ async function authenticate(db, req) {
   if (!token) return null;
   const th = await sha256Hex(token);
   const row = await db.first(
-    `SELECT u.id, u.username, u.name, u.role, u.all_teams, s.expires_at FROM sessions s
+    `SELECT u.id, u.username, u.name, u.role, u.all_teams, u.is_owner, s.expires_at FROM sessions s
      JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > ? AND u.active = 1`,
     th, nowIso()
   );
@@ -105,7 +105,7 @@ async function bootstrap(ctx) {
   }
   const seasons = await db.all('SELECT id, name, start_date, end_date, closed FROM seasons ORDER BY start_date DESC');
   return {
-    user: { id: user.id, username: user.username, name: user.name, role: user.role, all_teams: !!user.all_teams },
+    user: { id: user.id, username: user.username, name: user.name, role: user.role, all_teams: !!user.all_teams, is_owner: !!user.is_owner },
     teams, rivals, players, matches, seasons, thresholds: await getThresholds(db), server_time: nowIso(),
   };
 }
@@ -312,7 +312,49 @@ route('GET', '/api/audit', async (ctx) => {
 }, { admin: true });
 
 // ---------- Entrada ----------
+// Límites del plan gratuito de Cloudflare (se reinician a las 00:00 UTC; ver developers.cloudflare.com)
+export const FREE_LIMITS = { requests: 100_000, rows_read: 5_000_000, rows_written: 100_000, db_bytes: 5 * 1024 ** 3, github_repo_bytes: 1024 ** 3 };
+
+async function recordUsage(env, usage) {
+  try {
+    const day = new Date().toISOString().slice(0, 10);
+    const r = await env.DB.prepare(
+      `INSERT INTO usage_daily (day, requests, rows_read, rows_written) VALUES (?, 1, ?, ?)
+       ON CONFLICT(day) DO UPDATE SET requests = requests + 1, rows_read = rows_read + excluded.rows_read, rows_written = rows_written + excluded.rows_written`
+    ).bind(day, usage.read, usage.written + 1).run();
+    const size = r?.meta?.size_after;
+    if (size != null) await env.DB.prepare('UPDATE usage_daily SET db_size = ? WHERE day = ?').bind(size, day).run();
+  } catch { /* contar el uso nunca debe romper una petición */ }
+}
+
+route('GET', '/api/usage', async (ctx) => {
+  requireOwner(ctx);
+  const day = new Date().toISOString().slice(0, 10);
+  const days = await ctx.db.all('SELECT day, requests, rows_read, rows_written FROM usage_daily ORDER BY day DESC LIMIT 14');
+  const sizeRow = await ctx.db.first('SELECT db_size FROM usage_daily WHERE db_size IS NOT NULL ORDER BY day DESC LIMIT 1');
+  const today = days.find((d) => d.day === day) || { day, requests: 0, rows_read: 0, rows_written: 0 };
+  let github = null;
+  const repo = ctx.env.GITHUB_REPO;
+  if (repo && /^[\w.-]+\/[\w.-]+$/.test(repo)) {
+    try {
+      const r = await fetch(`https://api.github.com/repos/${repo}`, { headers: { 'User-Agent': 'urdaibai-stats', Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(5000) });
+      if (r.ok) { const j = await r.json(); github = { repo, bytes: (j.size || 0) * 1024, private: !!j.private }; }
+      else github = { repo, error: r.status };
+    } catch { github = { repo, error: 'network' }; }
+  }
+  return json({ day, today, days, db_bytes: sizeRow?.db_size ?? null, limits: FREE_LIMITS, github });
+}, { auth: true });
+
 export async function handle(request, env) {
+  let usage = { read: 0, written: 0 };
+  try {
+    return await handleInner(request, env, (u) => { usage = u; });
+  } finally {
+    await recordUsage(env, usage);
+  }
+}
+
+async function handleInner(request, env, setUsage) {
   const url = new URL(request.url);
   try {
     if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -320,6 +362,7 @@ export async function handle(request, env) {
       if (origin && new URL(origin).host !== url.host) throw new HttpError(403, 'bad_origin');
     }
     const db = makeDb(env.DB);
+    setUsage(db.usage);
     let matched = null, params = {};
     for (const r of routes) {
       if (r.method !== request.method) continue;
