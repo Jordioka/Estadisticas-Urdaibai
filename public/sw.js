@@ -1,5 +1,5 @@
 // Service worker: la app se abre sin conexión (lo anotado se guarda en el móvil y se envía al volver la cobertura).
-const VERSION = 'v4';
+const VERSION = 'v5';
 const CACHE = `urdaibai-${VERSION}`;
 const SHELL = ['/', '/index.html', '/css/app.css', '/manifest.webmanifest', '/icons/logo.png', '/icons/icon-192.png',
   '/js/app.js', '/js/dom.js', '/js/i18n.js', '/js/strings.js', '/js/store.js', '/js/stats.js', '/js/ui.js', '/js/court.js', '/js/shot-sheet.js',

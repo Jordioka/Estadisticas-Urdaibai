@@ -19,7 +19,7 @@ const AREA9 = 'M-10.5 0 A9 9 0 0 0 -1.5 9 L1.5 9 A9 9 0 0 0 10.5 0 Z';
 // Franja entre la línea de 6 m y la de 9 m (se recorta con el área de 9 m)
 const MID = [
   { z: '6D', a1: 28, a2: 68, at: [5.3, 5.9] },
-  { z: '6C', a1: 68, a2: 112, at: [-2.2, 7.4] },
+  { z: '6C', a1: 68, a2: 112, at: [0, 7.5] },
   { z: '6I', a1: 112, a2: 152, at: [-5.3, 5.9] },
 ];
 
@@ -69,8 +69,8 @@ export function courtSVG(opts = {}) {
   root.append(svg('rect', { x: -10, y: 0, width: 20, height: 13, class: 'court-border', 'pointer-events': 'none' }));
   root.append(svg('rect', { x: -1.5, y: -1.1, width: 3, height: 1.1, class: 'court-goal', 'pointer-events': 'none' }));
   // 7 m: punto pulsable
-  const seven = svg('circle', { cx: 0, cy: 7.25, r: 1.15, class: 'zone seven', 'data-zone': '7M', role: 'button', tabindex: 0, 'aria-label': t('zone.7M') });
-  const sevenSub = svg('text', { x: 0, y: 7.25, class: 'zone-count', 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'pointer-events': 'none' });
+  const seven = svg('circle', { cx: 0, cy: 4.4, r: 1.15, class: 'zone seven', 'data-zone': '7M', role: 'button', tabindex: 0, 'aria-label': t('zone.7M') });
+  const sevenSub = svg('text', { x: 0, y: 4.4, class: 'zone-count', 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'pointer-events': 'none' });
   zones['7M'] = { p: seven, sub: sevenSub };
   if (opts.onSelect) {
     seven.addEventListener('click', () => opts.onSelect('7M'));

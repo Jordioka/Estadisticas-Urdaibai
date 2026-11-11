@@ -46,11 +46,11 @@ export function openShotSheet(opts) {
   const finalBox = h('div', { class: 'final-box' });
   const moreBox = h('div');
 
-  const court = courtSVG({ selected: sel.zone, onSelect: (z) => { sel.zone = z; refresh(true); } });
+  const court = courtSVG({ selected: sel.zone, onSelect: (z) => { sel.zone = sel.zone === z ? null : z; refresh(sel.zone != null); } });
   const goal = goalGrid({
     cell: sel.cell, out: sel.out,
-    onCell: (n) => { sel.cell = n; sel.out = null; if (sel.outcome && OUTS.includes(sel.outcome)) sel.outcome = null; refresh(); },
-    onOut: (k) => { sel.out = k; sel.cell = null; sel.outcome = k; refresh(true); },
+    onCell: (n) => { sel.cell = sel.cell === n ? null : n; sel.out = null; if (sel.outcome && OUTS.includes(sel.outcome)) sel.outcome = null; refresh(); },
+    onOut: (k) => { sel.out = sel.out === k ? null : k; sel.cell = null; sel.outcome = sel.out; refresh(sel.out != null); },
   });
   const zoneName = h('p', { class: 'zone-pick', 'aria-live': 'polite' });
 
