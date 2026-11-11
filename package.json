@@ -1,0 +1,15 @@
+{
+  "name": "urdaibai-stats",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Urdaibai E.T. · Estadísticas de balonmano (Cloudflare Pages + Functions + D1)",
+  "scripts": {
+    "dev": "node scripts/dev-server.mjs",
+    "test": "node --test test/*.test.mjs",
+    "create-admin": "node scripts/create-admin.mjs"
+  },
+  "dependencies": {
+    "xlsx": "0.18.5"
+  }
+}

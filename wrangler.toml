@@ -1,0 +1,11 @@
+# Configuración de Cloudflare Pages + D1 (la usa también `wrangler` para los comandos de la base de datos).
+name = "urdaibai-stats"
+compatibility_date = "2025-01-01"
+pages_build_output_dir = "public"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "urdaibai-stats"
+# Sustituye por el identificador que te da `npx wrangler d1 create urdaibai-stats`
+database_id = "PEGA-AQUI-EL-ID-DE-TU-BASE-DE-DATOS"
+migrations_dir = "migrations"
