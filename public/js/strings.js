@@ -216,5 +216,6 @@ export const D = {
   'col.pen': ['Penaltis', 'Penaltiak'], 'col.cp': ['Contrapases', 'Kontrapaseak'],
   'col.keeper_legend': ['Penaltis = paradas/goles/fuera · Contrapases = ok/fallo', 'Penaltiak = geldiketak/golak/kanpora · Kontrapaseak = onak/hutsak'],
   'tpl.adv.detail': ['Detalle', 'Xehetasuna'], 'tpl.adv.phase': ['Fase', 'Fasea'],
+  'events.all': ['Ver todo lo anotado ({n})', 'Ikusi idatzi guztia ({n})'], 'events.less': ['Ver solo las últimas 3', 'Ikusi azken 3ak soilik'],
   'tbl.players_detail': ['Jugadores · detalle', 'Jokalariak · xehetasuna'],
 };
