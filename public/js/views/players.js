@@ -11,7 +11,7 @@ import { flush } from '../store.js';
 
 const POSITIONS = ['Portero', 'Extremo', 'Lateral', 'Central', 'Pivote'];
 
-export function playersView(root) {
+export function playersView(root, params = {}) {
   const page = h('div', { class: 'page' });
   root.append(page);
   let q = '';
@@ -67,14 +67,16 @@ export function playersView(root) {
     function fill() {
       const shown = list.filter((p) => !q || normName(`${p.number ?? ''} ${p.name} ${p.surname || ''}`).includes(normName(q)));
       listBox.replaceChildren(list.length
-        ? (shown.length ? h('div', { class: 'cards' }, shown.map((p) => h('button', { type: 'button', class: 'player-card', onclick: () => editor(p) },
+        ? (shown.length ? h('div', { class: 'cards' }, shown.map((p) => h('a', { class: 'player-card', href: `#/player/${p.id}` },
           h('span', { class: 'dorsal' }, p.number ?? '·'),
           h('span', { class: 'pc-main' }, h('strong', null, `${p.name}${p.surname ? ' ' + p.surname : ''}`), h('span', { class: 'muted small' }, p.position || '')),
           p.is_goalkeeper ? h('span', { class: 'badge' }, '🧤 ', t('pl.gk')) : null,
+          h('button', { type: 'button', class: 'btn small', 'aria-label': t('edit'), onclick: (e) => { e.preventDefault(); e.stopPropagation(); editor(p); } }, '✎'),
           h('span', { class: 'chev' }, '›')))) : h('p', { class: 'muted center' }, t('search.none')))
         : h('p', { class: 'muted center' }, t('pl.empty')));
     }
     fill();
   }
   render();
+  if (params.edit) { const ep = state.players.find((x) => x.id === params.edit); if (ep) { history.replaceState(null, '', '#/players'); editor(ep); } }
 }

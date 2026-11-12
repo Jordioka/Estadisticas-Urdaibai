@@ -219,6 +219,7 @@ export const D = {
   'events.all': ['Ver todo lo anotado ({n})', 'Ikusi idatzi guztia ({n})'], 'events.less': ['Ver solo las últimas 3', 'Ikusi azken 3ak soilik'],
   'search.rival': ['Buscar rival…', 'Bilatu aurkaria…'], 'search.player': ['Buscar jugador/a…', 'Bilatu jokalaria…'], 'search.any': ['Buscar rival o jugador/a…', 'Bilatu aurkaria edo jokalaria…'], 'search.none': ['Sin resultados.', 'Emaitzarik ez.'],
   'tbl.players_detail': ['Jugadores · detalle', 'Jokalariak · xehetasuna'],
+  'ps.matches': ['Partidos', 'Partidak'], 'ps.by_match': ['Partido a partido', 'Partidaz partida'],
   // --- importar hoja INPESCA
   'imp.kind.inpesca': ['Excel INPESCA', 'INPESCA Excela'],
   'imp.help.inpesca': ['Sube el Excel de estadísticas individualizadas del club (el archivo entero o una sola hoja). Cada hoja es un partido: se revisan los datos, se avisa si el partido ya existe y no se guarda nada hasta que pulses «Importar».', 'Igo klubaren estatistika indibidualen Excela (fitxategi osoa edo orri bakarra). Orri bakoitza partida bat da: datuak berrikusten dira, partida badagoela abisatzen da eta ez da ezer gordetzen «Inportatu» sakatu arte.'],

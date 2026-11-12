@@ -7,6 +7,7 @@ import { matchView } from './views/match.js';
 import { summaryView } from './views/summary.js';
 import { homeView, newMatchView } from './views/home.js';
 import { playersView } from './views/players.js';
+import { playerView } from './views/player.js';
 import { importView } from './views/import.js';
 import { reportsView } from './views/reports.js';
 import { adminView } from './views/admin.js';
@@ -54,7 +55,7 @@ export async function route() {
   const key = name || 'home';
   shell.main.replaceChildren();
   document.body.dataset.route = IMMERSIVE.has(key) ? 'immersive' : key;
-  shell.nav.querySelectorAll('a').forEach((el) => el.classList.toggle('on', el.dataset.key === (['import', 'admin', 'help', 'usage'].includes(key) ? 'more' : key === 'home' || key === 'summary' ? '' : key)));
+  shell.nav.querySelectorAll('a').forEach((el) => el.classList.toggle('on', el.dataset.key === (['import', 'admin', 'help', 'usage'].includes(key) ? 'more' : key === 'player' ? 'players' : key === 'home' || key === 'summary' ? '' : key)));
   shell.nav.querySelector('a[data-key=""]')?.classList.toggle('on', key === 'home' || key === 'summary');
   window.scrollTo(0, 0);
   try {
@@ -63,7 +64,8 @@ export async function route() {
       case 'new': newMatchView(shell.main, { practice: params.practice === '1' }); break;
       case 'match': await matchView(shell.main, { id: a }); break;
       case 'summary': await summaryView(shell.main, { id: a }); break;
-      case 'players': playersView(shell.main); break;
+      case 'players': playersView(shell.main, params); break;
+      case 'player': await playerView(shell.main, { id: a }); break;
       case 'import': importView(shell.main, params); break;
       case 'reports': reportsView(shell.main); break;
       case 'admin': adminView(shell.main, { section: a }); break;
