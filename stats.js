@@ -3,16 +3,23 @@
 
 export const COUNTERS = ['possessions', 'losses', 'shots', 'goals', 'goals_against', 'shots_against', 'saves'];
 
-export const EVENT_TYPES = ['possession', 'loss', 'goal', 'shot_miss', 'goal_against', 'save', 'shot_against_miss'];
+export const EVENT_TYPES = ['possession', 'loss', 'goal', 'shot_miss', 'goal_against', 'save', 'shot_against_miss', 'recovery', 'sanction', 'counter_pass'];
+// Subtipos de la vista completa (igual que el Excel del club)
+export const LOSS_KINDS = ['pase', 'pisando', 'falta_ataque', 'pasos']; // PASES, PISANDO, F. ATAQUE, PASOS
+export const REC_KINDS = ['robo', 'chapa']; // ROBOS, CHAPAS
+export const SANCTION_KINDS = ['dos_min']; // 2´
+export const CP_KINDS = ['ok', 'fallo']; // CONTRAPASE OK / FALLO (portero)
+export const SUBTYPES = { loss: LOSS_KINDS, recovery: REC_KINDS, sanction: SANCTION_KINDS, counter_pass: CP_KINDS };
 
-// Qué suma cada evento. Solo estas relaciones automáticas existen:
+// Qué suma cada evento. Relaciones automáticas:
 // gol → lanzamiento, gol en contra → lanzamiento contrario, parada → lanzamiento contrario.
-// Las posesiones NUNCA se suman solas.
+// Las POSESIONES se calculan solas: cada acción de ataque que termina (gol, lanzamiento fallado o pérdida) es una posesión.
+// (El antiguo evento «posesión» ya no suma: sus datos viejos se ignoran para no contar dos veces.)
 export const CONTRIB = {
-  possession: { possessions: 1 },
-  loss: { losses: 1 },
-  goal: { goals: 1, shots: 1 },
-  shot_miss: { shots: 1 },
+  possession: {},
+  loss: { losses: 1, possessions: 1 },
+  goal: { goals: 1, shots: 1, possessions: 1 },
+  shot_miss: { shots: 1, possessions: 1 },
   goal_against: { goals_against: 1, shots_against: 1 },
   save: { saves: 1, shots_against: 1 },
   shot_against_miss: { shots_against: 1 },
@@ -44,7 +51,7 @@ export const MISS_RESULTS_AGAINST = ['out', 'post', 'block'];
 export const SHOT_KINDS = ['salto', 'apoyo', 'vaselina', 'caida', 'otro'];
 export const TRAJECTORIES = ['alta', 'media', 'baja', 'pica'];
 export const PRESSURES = ['sin', 'media', 'alta'];
-export const PHASES = ['posicional', 'contraataque', 'superioridad', 'inferioridad', 'porteria_vacia'];
+export const PHASES = ['posicional', 'contraataque', 'superioridad', 'inferioridad', 'porteria_vacia', 'penalti'];
 
 export const emptyCounters = () => Object.fromEntries(COUNTERS.map((k) => [k, 0]));
 
@@ -133,9 +140,10 @@ export function seasonForDate(dateStr) {
 
 export const isIsoDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(Date.parse(s));
 
-// Evento "pendiente de completar": lanzamiento sin zona (anotado en vista simple)
+// Evento "pendiente de completar": lanzamiento anotado en la vista simple, sin jugador (propio) ni portero (en contra)
 export const isPending = (e) =>
-  !e.deleted_at && SHOT_TYPES_ALL.includes(e.type) && (e.zone == null || e.zone === '');
+  !e.deleted_at && SHOT_TYPES_ALL.includes(e.type) &&
+  (OWN_SHOT_TYPES.includes(e.type) ? !e.player_id : !e.goalkeeper_id);
 
 const inList = (v, list) => v == null || v === '' || list.includes(v);
 
@@ -150,14 +158,17 @@ export function validateEvent(e) {
   if (e.goal_cell != null && e.goal_cell !== '' && !GOAL_CELLS.includes(Number(e.goal_cell))) return 'goal_cell';
   if (e.type === 'shot_miss' && !inList(e.result, MISS_RESULTS_OWN)) return 'result';
   if (e.type === 'shot_against_miss' && !inList(e.result, MISS_RESULTS_AGAINST)) return 'result';
-  if (['goal', 'goal_against', 'save', 'possession', 'loss'].includes(e.type) && e.result) return 'result';
+  if (['goal', 'goal_against', 'save', 'possession', 'loss', 'recovery', 'sanction', 'counter_pass'].includes(e.type) && e.result) return 'result';
   // La celda de portería solo tiene sentido si el balón fue a puerta
   if (e.goal_cell != null && e.goal_cell !== '') {
     const toGoal = ['goal', 'goal_against', 'save'].includes(e.type) || (e.type === 'shot_miss' && e.result === 'save');
     if (!toGoal) return 'goal_cell';
   }
-  if (e.player_id && !['possession', 'loss', 'goal', 'shot_miss'].includes(e.type)) return 'player';
-  if (e.goalkeeper_id && !['goal_against', 'save'].includes(e.type)) return 'goalkeeper';
+  if (e.player_id && !['possession', 'loss', 'goal', 'shot_miss', 'recovery', 'sanction'].includes(e.type)) return 'player';
+  if (e.goalkeeper_id && !['goal_against', 'save', 'shot_against_miss', 'counter_pass'].includes(e.type)) return 'goalkeeper';
+  if (e.subtype != null && e.subtype !== '') {
+    if (!SUBTYPES[e.type] || !SUBTYPES[e.type].includes(e.subtype)) return 'subtype';
+  } else if (['recovery', 'sanction', 'counter_pass'].includes(e.type)) return 'subtype';
   if (!isShot && (e.shot_type || e.trajectory || e.pressure)) return 'not_a_shot';
   if (!inList(e.shot_type, SHOT_KINDS)) return 'shot_type';
   if (!inList(e.trajectory, TRAJECTORIES)) return 'trajectory';
@@ -172,17 +183,28 @@ export function playerStats(events) {
   const map = new Map(); // player_id|null → contadores del jugador
   const get = (id) => {
     const k = id || null;
-    if (!map.has(k)) map.set(k, { player_id: k, possessions: 0, losses: 0, shots: 0, goals: 0 });
+    if (!map.has(k)) map.set(k, {
+      player_id: k, possessions: 0, losses: 0, shots: 0, goals: 0,
+      goals_fast: 0, miss_out: 0, miss_saved: 0, miss_fast: 0, // contragol · fuera/poste · parada · contrafallo
+      loss_pase: 0, loss_pisando: 0, loss_falta_ataque: 0, loss_pasos: 0, // pérdidas por tipo
+      steals: 0, blocks: 0, two_min: 0, // robos · chapas · 2´
+    });
     return map.get(k);
   };
   for (const e of events) {
     if (e.deleted_at) continue;
-    if (!['possession', 'loss', 'goal', 'shot_miss'].includes(e.type)) continue;
+    if (!['possession', 'loss', 'goal', 'shot_miss', 'recovery', 'sanction'].includes(e.type)) continue;
     const s = get(e.player_id);
-    if (e.type === 'possession') s.possessions++;
-    if (e.type === 'loss') s.losses++;
-    if (e.type === 'goal') { s.goals++; s.shots++; }
-    if (e.type === 'shot_miss') s.shots++;
+    if (e.type === 'loss') { s.losses++; s.possessions++; if (LOSS_KINDS.includes(e.subtype)) s[`loss_${e.subtype}`]++; }
+    if (e.type === 'goal') { s.goals++; s.shots++; s.possessions++; if (e.phase === 'contraataque') s.goals_fast++; }
+    if (e.type === 'shot_miss') {
+      s.shots++; s.possessions++;
+      if (e.phase === 'contraataque') s.miss_fast++;
+      else if (e.result === 'save') s.miss_saved++;
+      else s.miss_out++;
+    }
+    if (e.type === 'recovery') { if (e.subtype === 'robo') s.steals++; else if (e.subtype === 'chapa') s.blocks++; }
+    if (e.type === 'sanction') s.two_min++;
   }
   return [...map.values()];
 }
@@ -191,13 +213,16 @@ export function goalkeeperStats(events) {
   const map = new Map();
   const get = (id) => {
     const k = id || null;
-    if (!map.has(k)) map.set(k, { player_id: k, saves: 0, goals_against: 0 });
+    if (!map.has(k)) map.set(k, { player_id: k, saves: 0, goals_against: 0, out: 0, pen_saves: 0, pen_goals: 0, pen_out: 0, cp_ok: 0, cp_fail: 0 });
     return map.get(k);
   };
   for (const e of events) {
     if (e.deleted_at) continue;
-    if (e.type === 'save') get(e.goalkeeper_id).saves++;
-    if (e.type === 'goal_against') get(e.goalkeeper_id).goals_against++;
+    const pen = e.phase === 'penalti';
+    if (e.type === 'save') { const s = get(e.goalkeeper_id); s.saves++; if (pen) s.pen_saves++; }
+    if (e.type === 'goal_against') { const s = get(e.goalkeeper_id); s.goals_against++; if (pen) s.pen_goals++; }
+    if (e.type === 'shot_against_miss' && e.goalkeeper_id) { const s = get(e.goalkeeper_id); s.out++; if (pen) s.pen_out++; }
+    if (e.type === 'counter_pass') { const s = get(e.goalkeeper_id); if (e.subtype === 'ok') s.cp_ok++; else s.cp_fail++; }
   }
   return [...map.values()].map((s) => ({ ...s, save_pct: ratio(s.saves, s.saves + s.goals_against) }));
 }

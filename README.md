@@ -10,7 +10,7 @@ en **euskera** (por defecto) y **castellano**.
 ## Qué hace
 
 - **Vista sencilla** (pensada para delegados): 7 botones de equipo (Posesión, Gol, Lanzamiento fallado, Pérdida, Gol en contra, Parada, Lanzamiento contrario fallado), contadores siempre visibles, botón *Deshacer* y parte (1ª/2ª). Tocando un contador se corrige el total a mano.
-- **Vista "Más detalle"**: jugador, zona del campo (EI, 9I, 9C, 9D, ED, 6M, 7M, contraataque), punto de la portería (3×3) o fuera/poste/bloqueo, portero individualizado, tipo/trayectoria/presión/fase/minuto.
+- **Vista "Más detalle"** (igual que el Excel del club): eliges jugador/a y tocas **Gol, Contragol, Fuera/poste, Parada (del portero rival), Contrafallo**, **pérdidas** (Pase, Pisando, F. ataque, Pasos), **recuperaciones** (Robo, Chapa) y **2´**. Eliges portero/a y tocas **Parada, Gol, Fuera/poste, Contrapase OK/fallo** y, aparte, **Penaltis** (parada/gol/fuera). Al lado de cada botón sale cuántas lleva ese jugador. La **portería 3×3** se sigue pidiendo (opcional, se puede desactivar) y la zona del campo es opcional.
 - **Se pueden mezclar** las dos vistas en el mismo partido **sin duplicar**: cada hecho es un único evento; los contadores se calculan siempre desde los eventos. Los lanzamientos anotados en sencillo quedan "pendientes de completar" y al detallarlos se completa **el mismo** evento.
 - Relaciones automáticas (solo estas): Gol → +lanzamiento · Gol en contra → +lanzamiento contrario · Parada → +lanzamiento contrario. Las posesiones **solo** se anotan con su botón.
 - Porcentajes con los colores del Excel del club (editables por el administrador): efectividad ofensiva (goles ÷ posesiones), % pérdidas, % efectividad de lanzamiento, % paradas (paradas ÷ (goles en contra + paradas), también por portero).
@@ -105,7 +105,7 @@ Cada vez que hagas *push* a GitHub, Cloudflare vuelve a publicar la web automát
 
 Cuando recibas una versión nueva con archivos nuevos en `migrations/`, el orden importa:
 
-1. **Primero** aplica las migraciones a la base de datos: `npx wrangler d1 migrations apply urdaibai-stats --remote`
+1. **Primero** aplica las migraciones a la base de datos: `npx wrangler d1 migrations apply urdaibai-stats --remote` (la 0003 reconstruye la tabla de eventos conservando todo lo anotado; haz antes una copia con el comando de «Copia de seguridad»)
 2. **Después** sube los archivos a GitHub (Cloudflare republica solo).
 
 Si lo haces al revés, la web puede dar error hasta que se aplique la migración.

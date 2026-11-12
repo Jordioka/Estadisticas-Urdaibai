@@ -2,7 +2,7 @@
 import { validateEvent, isIsoDate, COUNTERS } from '../public/js/stats.js';
 import { HttpError, nowIso, canTeam, ensureSeason, audit, requireMatchWrite, cleanStr, validId } from './core.js';
 
-export const EVENT_FIELDS = ['part', 'minute', 'player_id', 'goalkeeper_id', 'zone', 'goal_cell', 'result', 'shot_type', 'trajectory', 'pressure', 'phase'];
+export const EVENT_FIELDS = ['part', 'minute', 'player_id', 'goalkeeper_id', 'zone', 'goal_cell', 'result', 'shot_type', 'trajectory', 'pressure', 'phase', 'subtype'];
 const INT_FIELDS = ['part', 'minute', 'goal_cell'];
 
 function normEventFields(src) {
@@ -110,9 +110,9 @@ const OPS = {
     const ts = clientTs(op.ts);
     await ctx.db.run(
       `INSERT INTO events (id, match_id, type, part, minute, player_id, goalkeeper_id, zone, goal_cell, result,
-        shot_type, trajectory, pressure, phase, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        shot_type, trajectory, pressure, phase, subtype, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       op.id, m.id, e.type, e.part, e.minute, e.player_id, e.goalkeeper_id, e.zone, e.goal_cell, e.result,
-      e.shot_type, e.trajectory, e.pressure, e.phase, ctx.user.id, ts, ts
+      e.shot_type, e.trajectory, e.pressure, e.phase, e.subtype, ctx.user.id, ts, ts
     );
   },
 
@@ -128,9 +128,9 @@ const OPS = {
     await checkPeople(ctx, m, merged);
     await ctx.db.run(
       `UPDATE events SET type=?, part=?, minute=?, player_id=?, goalkeeper_id=?, zone=?, goal_cell=?, result=?,
-        shot_type=?, trajectory=?, pressure=?, phase=?, updated_at=? WHERE id=?`,
+        shot_type=?, trajectory=?, pressure=?, phase=?, subtype=?, updated_at=? WHERE id=?`,
       merged.type, merged.part, merged.minute, merged.player_id, merged.goalkeeper_id, merged.zone, merged.goal_cell, merged.result,
-      merged.shot_type, merged.trajectory, merged.pressure, merged.phase, nowIso(), ev.id
+      merged.shot_type, merged.trajectory, merged.pressure, merged.phase, merged.subtype, nowIso(), ev.id
     );
     await audit(ctx, 'event.update', 'event', ev.id, { match_id: ev.match_id, from: ev.type, to: merged.type });
   },

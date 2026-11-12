@@ -3,7 +3,7 @@ import { t } from './i18n.js';
 
 export const PLAYER_HEADERS = ['Equipo', 'Nombre', 'Apellidos', 'Dorsal', 'Posición', 'Portero'];
 export const SIMPLE_HEADERS = ['Equipo', 'Partido', 'Fecha', 'Rival', 'Posesiones', 'Pérdidas', 'Lanzamientos', 'Goles', 'Goles en contra', 'Lanzamientos contrarios', 'Paradas'];
-export const ADV_HEADERS = ['Equipo', 'Fecha', 'Rival', 'Parte', 'Minuto', 'Evento', 'Jugador', 'Portero', 'Zona', 'Punto portería', 'Resultado', 'Tipo lanzamiento', 'Trayectoria', 'Presión', 'Fase'];
+export const ADV_HEADERS = ['Equipo', 'Fecha', 'Rival', 'Parte', 'Minuto', 'Evento', 'Jugador', 'Portero', 'Zona', 'Punto portería', 'Resultado', 'Tipo lanzamiento', 'Trayectoria', 'Presión', 'Fase', 'Detalle'];
 
 export function playersTemplate(team) {
   return [{
@@ -30,19 +30,27 @@ export function advancedTemplate(team) {
   return [{
     name: 'Eventos',
     aoa: [ADV_HEADERS,
-      [...b, 1, 3, 'posesion', '', '', '', '', '', '', '', ''],
-      [...b, 1, 3, 'gol', 7, '', 'EI', 1, '', 'salto', 'alta', 'media', 'posicional'],
-      [...b, 1, 5, 'lanzamiento_fallado', 10, '', '9C', '', 'poste', '', '', '', ''],
-      [...b, 1, 6, 'perdida', 7, '', '', '', '', '', '', '', ''],
-      [...b, 2, 40, 'parada', '', 1, '9D', 4, '', '', '', '', ''],
-      [...b, 2, 41, 'gol_en_contra', '', 1, '6M', 9, '', '', '', '', ''],
-      [...b, 2, 42, 'lanzamiento_contrario_fallado', '', '', 'ED', '', 'fuera', '', '', '', '']],
-    widths: [20, 12, 22, 7, 8, 30, 9, 9, 7, 14, 11, 16, 12, 10, 14],
+      [...b, 1, 3, 'posesion', '', '', '', '', '', '', '', '', '', ''],
+      [...b, 1, 3, 'gol', 7, '', '', 1, '', '', '', '', '', ''],
+      [...b, 1, 4, 'gol', 10, '', '', '', '', '', '', '', 'contraataque', ''],
+      [...b, 1, 5, 'lanzamiento_fallado', 10, '', '', '', 'fuera', '', '', '', '', ''],
+      [...b, 1, 5, 'lanzamiento_fallado', 7, '', '', '', 'parada', '', '', '', '', ''],
+      [...b, 1, 6, 'perdida', 7, '', '', '', '', '', '', '', '', 'pisando'],
+      [...b, 1, 8, 'recuperacion', 10, '', '', '', '', '', '', '', '', 'robo'],
+      [...b, 1, 9, 'amonestacion', 7, '', '', '', '', '', '', '', '', '2'],
+      [...b, 2, 40, 'parada', '', 1, '', 4, '', '', '', '', '', ''],
+      [...b, 2, 41, 'gol_en_contra', '', 1, '', 9, '', '', '', '', '', ''],
+      [...b, 2, 42, 'lanzamiento_contrario_fallado', '', 1, '', '', 'fuera', '', '', '', '', ''],
+      [...b, 2, 43, 'contrapase', '', 1, '', '', '', '', '', '', '', 'ok'],
+      [...b, 2, 50, 'parada', '', 1, '7M', '', '', '', '', '', 'penalti', '']],
+    widths: [20, 12, 22, 7, 8, 30, 9, 9, 7, 14, 11, 16, 12, 10, 14, 14],
   }, {
     name: t('tpl.help'),
     aoa: [[t('tpl.adv.help1')], [t('tpl.adv.help2')], [''],
-      [t('tpl.adv.events'), 'posesion, perdida, gol, lanzamiento_fallado, gol_en_contra, parada, lanzamiento_contrario_fallado'],
-      [t('tpl.adv.zones'), 'EI, 9I, 9C, 9D, ED, 6M, 7M, CA'],
+      [t('tpl.adv.events'), 'posesion, perdida, gol, lanzamiento_fallado, gol_en_contra, parada, lanzamiento_contrario_fallado, recuperacion, amonestacion, contrapase'],
+      [t('tpl.adv.detail'), 'perdida: pase, pisando, falta_ataque, pasos · recuperacion: robo, chapa · amonestacion: 2 · contrapase: ok, fallo'],
+      [t('tpl.adv.phase'), 'contraataque (contragol / contrafallo), penalti (penaltis del portero), posicional, superioridad, inferioridad, porteria_vacia'],
+      [t('tpl.adv.zones'), 'EI, ED, 6I, 6C, 6D, 7M, 9I, 9C, 9D (opcional)'],
       [t('tpl.adv.point'), '1-9 (3×3: 1 arriba-izquierda … 9 abajo-derecha)'],
       [t('tpl.adv.result'), 'parada, fuera, poste, bloqueo'],
       [t('tpl.adv.player'), t('tpl.adv.player_help')]],
