@@ -1,8 +1,9 @@
 // Importación desde CSV/Excel (las filas llegan ya leídas por el navegador).
 // Siempre: 1) validar y mostrar informe (dry_run), 2) guardar solo cuando el usuario confirma.
 import {
-  COUNTERS, validateEvent, isIsoDate, ZONES, counterWarnings,
+  COUNTERS, validateEvent, isIsoDate, ZONES, counterWarnings, totalCounters,
 } from '../public/js/stats.js';
+import { eventsFor, adjustmentsFor } from './reports.js';
 import { HttpError, nowIso, uuid, normName, cleanStr, accessibleTeams, audit, ensureSeason, requireAdmin } from './core.js';
 import { playerFields } from './ops.js';
 
@@ -41,6 +42,7 @@ const ALIAS = {
   pressure: ['presion', 'pressure'],
   phase: ['fase', 'phase'],
   subtype: ['detalle', 'detail', 'subtipo', 'xehetasuna'],
+  venue: ['condicion', 'casafuera', 'local', 'venue', 'campo'],
   possessions: ['posesiones', 'possessions', 'posesioak'],
   losses: ['perdidas', 'losses', 'galerak'],
   shots: ['lanzamientos', 'shots', 'jaurtiketak'],
@@ -273,7 +275,8 @@ export async function importMatches(ctx, body) {
     const gkey = `${t.team.id}|${date}|${rival.id}`;
     let g = groups.get(gkey);
     if (!g) {
-      g = { team: t.team, date, rival, counters: Object.fromEntries(COUNTERS.map((c) => [c, 0])), events: [], rows: [] };
+      const vv = key(A('venue') ?? '');
+      g = { team: t.team, date, rival, home_away: ['fuera', 'visitante', 'away', 'kanpoan', 'x'].includes(vv) ? 'away' : 'home', counters: Object.fromEntries(COUNTERS.map((c) => [c, 0])), events: [], rows: [] };
       groups.set(gkey, g);
       matchesList.push(g);
     }
@@ -336,12 +339,27 @@ export async function importMatches(ctx, body) {
       ? await ctx.db.all('SELECT id FROM matches WHERE team_id = ? AND rival_id = ? AND date = ? AND deleted_at IS NULL', g.team.id, rivalMap.get(normName(g.rival.name)).id, g.date)
       : [];
     g.existing = existing.map((x) => x.id);
+    // Marcador ya guardado (para compararlo con el nuevo) y partidos «parecidos»: mismo rival, fecha distinta pero cercana (±7 días)
+    g.existing_score = null;
+    if (g.existing.length) {
+      const ev = await eventsFor(ctx.db, [g.existing[0]]), adj = await adjustmentsFor(ctx.db, [g.existing[0]]);
+      const c = totalCounters(ev, adj);
+      g.existing_score = { goals: c.goals, goals_against: c.goals_against, events: ev.length };
+    }
+    g.similar = [];
+    if (rivalMap.has(normName(g.rival.name))) {
+      const sim = await ctx.db.all(
+        "SELECT id, date FROM matches WHERE team_id = ? AND rival_id = ? AND deleted_at IS NULL AND date <> ? AND date BETWEEN date(?, '-7 day') AND date(?, '+7 day')",
+        g.team.id, rivalMap.get(normName(g.rival.name)).id, g.date, g.date, g.date);
+      g.similar = sim.map((x) => x.date);
+    }
     const season = await ctx.db.first('SELECT closed FROM seasons WHERE ? BETWEEN start_date AND end_date', g.date);
     if (season?.closed && ctx.user.role !== 'admin') { report.errors.push({ row: g.rows[0], error: 'season_closed' }); g.invalid = true; }
     if (kind === 'simple') for (const w of counterWarnings(g.counters)) report.warnings.push({ row: g.rows[0], warning: w });
     if (g.existing.length) report.duplicates++;
     report.matches.push({
       team: g.team.name, date: g.date, rival: g.rival.name, rows: g.rows, duplicate: g.existing.length > 0, invalid: !!g.invalid,
+      existing_score: g.existing_score, similar: g.similar,
       ...(kind === 'simple' ? { counters: g.counters } : { events: g.events.length }),
     });
   }
@@ -370,8 +388,8 @@ export async function importMatches(ctx, body) {
     const seasonId = await ensureSeason(ctx.db, g.date);
     const now = nowIso();
     stmts.push(ctx.db.stmt(
-      "INSERT INTO matches (id, team_id, rival_id, date, home_away, season_id, is_practice, created_by, created_at, updated_at) VALUES (?,?,?,?, 'home', ?,0,?,?,?)",
-      mid, g.team.id, g.rival.id, g.date, seasonId, ctx.user.id, now, now));
+      "INSERT INTO matches (id, team_id, rival_id, date, home_away, season_id, is_practice, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,0,?,?,?)",
+      mid, g.team.id, g.rival.id, g.date, g.home_away, seasonId, ctx.user.id, now, now));
     if (kind === 'simple') {
       for (const c of COUNTERS)
         if (g.counters[c] !== 0) stmts.push(ctx.db.stmt('INSERT INTO adjustments (match_id, stat, delta, updated_by, updated_at) VALUES (?,?,?,?,?)', mid, c, g.counters[c], ctx.user.id, now));

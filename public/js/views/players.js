@@ -2,7 +2,8 @@
 import { h, toast, sheet, confirmDialog, uid } from '../dom.js';
 import { t } from '../i18n.js';
 import { state, enqueue, playersOf, teamName } from '../store.js';
-import { field, errMsg } from '../ui.js';
+import { field, errMsg, searchBox } from '../ui.js';
+import { normName } from '../names.js';
 import { currentTeamId, teamSelect } from './home.js';
 import { downloadXlsx, downloadCsv } from '../files.js';
 import { PLAYER_HEADERS } from '../templates.js';
@@ -13,6 +14,7 @@ const POSITIONS = ['Portero', 'Extremo', 'Lateral', 'Central', 'Pivote'];
 export function playersView(root) {
   const page = h('div', { class: 'page' });
   root.append(page);
+  let q = '';
 
   function editor(p) {
     const team = currentTeamId();
@@ -52,6 +54,7 @@ export function playersView(root) {
     const team = currentTeamId();
     if (!state.teams.length) { page.replaceChildren(h('p', { class: 'muted' }, t('home.no_teams'))); return; }
     const list = playersOf(team);
+    const listBox = h('div');
     page.replaceChildren(
       h('div', { class: 'page-head' }, h('h1', null, t('pl.title')), teamSelect(render)),
       h('div', { class: 'btn-row wrap' },
@@ -59,13 +62,19 @@ export function playersView(root) {
         h('a', { class: 'btn', href: '#/import?kind=players' }, t('pl.import')),
         h('button', { class: 'btn', type: 'button', onclick: () => downloadXlsx(`jugadores-${teamName(team)}.xlsx`, [{ name: 'Jugadores', aoa: rows(list) }]) }, t('export.xlsx')),
         h('button', { class: 'btn', type: 'button', onclick: () => downloadCsv(`jugadores-${teamName(team)}.csv`, rows(list)) }, t('export.csv'))),
-      list.length
-        ? h('div', { class: 'cards' }, list.map((p) => h('button', { type: 'button', class: 'player-card', onclick: () => editor(p) },
+      list.length > 5 ? searchBox(t('search.player'), q, (v) => { q = v; fill(); }) : null,
+      listBox);
+    function fill() {
+      const shown = list.filter((p) => !q || normName(`${p.number ?? ''} ${p.name} ${p.surname || ''}`).includes(normName(q)));
+      listBox.replaceChildren(list.length
+        ? (shown.length ? h('div', { class: 'cards' }, shown.map((p) => h('button', { type: 'button', class: 'player-card', onclick: () => editor(p) },
           h('span', { class: 'dorsal' }, p.number ?? '·'),
           h('span', { class: 'pc-main' }, h('strong', null, `${p.name}${p.surname ? ' ' + p.surname : ''}`), h('span', { class: 'muted small' }, p.position || '')),
           p.is_goalkeeper ? h('span', { class: 'badge' }, '🧤 ', t('pl.gk')) : null,
-          h('span', { class: 'chev' }, '›'))))
+          h('span', { class: 'chev' }, '›')))) : h('p', { class: 'muted center' }, t('search.none')))
         : h('p', { class: 'muted center' }, t('pl.empty')));
+    }
+    fill();
   }
   render();
 }

@@ -2,7 +2,8 @@
 import { h, svg, fmtDate, fmtPct, today, toast } from '../dom.js';
 import { t } from '../i18n.js';
 import { state, api, playerLabel, teamName } from '../store.js';
-import { segmented, field, percentBlock, countersGrid, warningsBox, pill, gradeClass, errMsg } from '../ui.js';
+import { segmented, field, percentBlock, countersGrid, warningsBox, pill, gradeClass, errMsg, searchBox } from '../ui.js';
+import { normName } from '../names.js';
 import { COUNTERS, percentages, gradeAll, sumCounters } from '../stats.js';
 import { currentTeamId, teamSelect } from './home.js';
 import { playersTable, keepersTable, mapsBlock } from './tables.js';
@@ -56,6 +57,13 @@ export function reportsView(root) {
   if (!state.seasons.some((s) => s.id === S.season)) S.season = defaultSeason();
   let report = null, busy = false, error = '';
   let playerSel = lsGet('urd.rep.player', '');
+  let q = ''; // búsqueda de rival (partidos) o de jugador/a (pestaña Jugadores)
+  let bodyBox = null;
+  const hasQ = () => normName(q) !== '';
+  const rivalOk = (m) => !hasQ() || normName(m.rival).includes(normName(q));
+  const haText = (m) => (m.home_away === 'away' ? t('away') : t('home'));
+  // partidos visibles tras buscar rival; los totales se recalculan sobre ellos
+  const shownMatches = () => report.matches.filter(rivalOk);
 
   async function load() {
     busy = true; error = ''; render();
@@ -99,30 +107,33 @@ export function reportsView(root) {
   }
 
   // ---- tablas ----
-  function matchesTable() {
-    if (!report.matches.length) return h('p', { class: 'muted center' }, t('rep.none'));
+  function matchesTable(ms, totals) {
+    if (!ms.length) return h('p', { class: 'muted center' }, t('search.none'));
     const th = report.thresholds || state.thresholds;
     const cell = (stat, level, text) => h('td', { class: `cnum ${gradeClass(stat, level)}`, title: level === 'none' ? '' : t(`lv.${level}`) }, text, level !== 'none' ? h('span', { class: 'sr-only' }, ` (${t(`lv.${level}`)})`) : null);
-    const row = (label, rival, c, total) => {
+    const row = (label, rival, c, total, ha) => {
       const p = percentages(c), g = gradeAll(c, th, { perMatch: !total });
       return h('tr', { class: total ? 'total' : '' },
-        h('th', { scope: 'row' }, label), h('td', null, rival),
+        h('th', { scope: 'row' }, label), h('td', null, rival, ha ? h('span', { class: 'ha-tag' }, ha) : null),
         ...COLS.map((k) => (k === 'possessions' ? cell('possessions', g.possessions, c[k]) : h('td', { class: 'cnum' }, c[k]))),
         cell('off_eff', g.off_eff, fmtPct(p.off_eff)), cell('loss_pct', g.loss_pct, fmtPct(p.loss_pct)), h('td', { class: 'cnum' }, fmtPct(p.shot_eff)), cell('save_pct', g.save_pct, fmtPct(p.save_pct)));
     };
     return h('div', { class: 'table-wrap wide' }, h('table', { class: 'tbl matches' },
       h('thead', null, h('tr', null, h('th', null, t('date')), h('th', null, t('rival')), ...COLS.map((c) => h('th', { title: t(`stat.${c}`) }, SHORT[c])), ...PCTS.map((p) => h('th', null, t(`pct.${p}.short`))))),
-      h('tbody', null, report.matches.map((m) => row(fmtDate(m.date).slice(0, 5), m.rival, m.counters, false)), row(t('rep.total'), '', report.totals, true))));
+      h('tbody', null, ms.map((m) => row(fmtDate(m.date).slice(0, 5), `${m.home_away === 'away' ? '@ ' : ''}${m.rival}`, m.counters, false, haText(m))), row(t('rep.total'), '', totals, true))));
   }
 
   // Pestaña «Jugadores»: todos juntos o uno elegido partido a partido
   function playersTab() {
-    const info = report.players_info.filter((p) => report.players.rows.some((r) => r.player_id === p.id) || report.goalkeepers.rows.some((r) => r.player_id === p.id));
+    const hasData = (id) => report.players.rows.some((r) => r.player_id === id) || report.goalkeepers.rows.some((r) => r.player_id === id);
+    const info = report.players_info.filter((p) => !p.deleted_at || hasData(p.id)); // todos los jugadores del equipo, tengan o no datos
     if (!info.length) return h('p', { class: 'muted center' }, t('rep.player_none'));
     if (!info.some((p) => p.id === playerSel)) playerSel = '';
+    const vis = info.filter((p) => !hasQ() || normName(`${p.number ?? ''} ${p.name} ${p.surname || ''}`).includes(normName(q)) || p.id === playerSel);
     const pick = h('div', { class: 'chips people no-print' },
       h('button', { type: 'button', class: `chip${playerSel === '' ? ' on' : ''}`, onclick: () => { playerSel = ''; lsSet('urd.rep.player', ''); render(); } }, t('rep.all_players')),
-      info.map((p) => h('button', { type: 'button', class: `chip${playerSel === p.id ? ' on' : ''}`, onclick: () => { playerSel = p.id; lsSet('urd.rep.player', p.id); render(); } }, h('b', null, p.number ?? '·'), ' ', p.name)));
+      vis.map((p) => h('button', { type: 'button', class: `chip${playerSel === p.id ? ' on' : ''}`, onclick: () => { playerSel = p.id; lsSet('urd.rep.player', p.id); render(); } }, h('b', null, p.number ?? '·'), ' ', `${p.name}${p.surname ? ' ' + p.surname : ''}`)),
+      !vis.length ? h('span', { class: 'muted' }, t('search.none')) : null);
     if (!playerSel) return [pick, playersTable(report.players, nameOf), keepersTable(report.goalkeepers, nameOf)];
     const label = (m) => `${m.rival} ${fmtDate(m.date).slice(0, 5)}`;
     const mById = new Map(report.matches.map((m) => [m.id, m]));
@@ -162,7 +173,8 @@ export function reportsView(root) {
     if (error) return h('p', { class: 'warn' }, error);
     if (!report) return null;
     if (S.tab === 'matches') {
-      return [matchesTable(), report.matches.length ? lineChart(report.matches, state.thresholds) : null, report.matches.length ? h('p', { class: 'muted small' }, t('rep.legend')) : null];
+      const ms = shownMatches();
+      return [matchesTable(ms, hasQ() ? sumCounters(ms.map((m) => m.counters)) : report.totals), ms.length ? lineChart(ms, state.thresholds) : null, ms.length ? h('p', { class: 'muted small' }, t('rep.legend')) : null];
     }
     if (S.tab === 'season') {
       const c = report.totals, n = report.matches.length;
@@ -174,11 +186,12 @@ export function reportsView(root) {
       ] : h('p', { class: 'muted center' }, t('rep.none'));
     }
     if (S.tab === 'players') return report.matches.length ? playersTab() : h('p', { class: 'muted center' }, t('rep.none'));
-    return report.matches.length
-      ? h('div', { class: 'cards' }, [...report.matches].reverse().map((m) => h('a', { class: 'match-card', href: `#/summary/${m.id}` },
-        h('div', { class: 'mc-date' }, fmtDate(m.date).slice(0, 5)), h('div', { class: 'mc-main' }, h('strong', null, m.rival)),
+    const list = shownMatches();
+    return list.length
+      ? h('div', { class: 'cards' }, [...list].reverse().map((m) => h('a', { class: 'match-card', href: `#/summary/${m.id}` },
+        h('div', { class: 'mc-date' }, fmtDate(m.date).slice(0, 5)), h('div', { class: 'mc-main' }, h('strong', null, `${m.home_away === 'away' ? '@ ' : ''}${m.rival}`), h('span', { class: 'muted small' }, haText(m))),
         h('div', { class: 'mc-score' }, m.counters.goals, '–', m.counters.goals_against), h('span', { class: 'chev' }, '›'))))
-      : h('p', { class: 'muted center' }, t('rep.none'));
+      : h('p', { class: 'muted center' }, report.matches.length ? t('search.none') : t('rep.none'));
   }
 
   function render() {
@@ -195,7 +208,8 @@ export function reportsView(root) {
             h('div', { class: 'two' }, field(t('rep.from'), h('input', { type: 'date', value: S.from, onchange: (e) => { S.from = e.target.value; load(); } })), field(t('rep.to'), h('input', { type: 'date', value: S.to, onchange: (e) => { S.to = e.target.value; load(); } }))),
             segmented([{ value: '', label: t('rep.any') }, { value: 'home', label: t('home') }, { value: 'away', label: t('away') }], S.ha, (v) => { S.ha = v; load(); })))),
       segmented(['matches', 'season', 'players', 'match'].map((k) => ({ value: k, label: t(`rep.tab.${k}`) })), S.tab, (v) => { S.tab = v; lsSet('urd.rep', S); render(); }, t('rep.title')),
-      body(),
+      report && S.tab !== 'season' ? searchBox(t(S.tab === 'players' ? 'search.player' : 'search.rival'), q, (v) => { q = v; if (bodyBox) bodyBox.replaceChildren(...[].concat(body() || [])); }) : null,
+      bodyBox = h('div', null, ...[].concat(body() || [])),
       report && report.matches.length ? h('div', { class: 'btn-row wrap no-print' },
         h('button', { class: 'btn primary', type: 'button', onclick: () => window.print() }, t('export.pdf')),
         h('button', { class: 'btn', type: 'button', onclick: exportXlsx }, t('export.xlsx')),

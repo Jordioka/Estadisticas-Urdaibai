@@ -221,3 +221,16 @@ td.g-strong { background: var(--strong-bg); } td.g-light { background: var(--lig
 .sticky-save { position: sticky; bottom: 0; background: #fff; padding: 10px 0 calc(10px + var(--safe-b)); margin-top: 10px; }
 .chips.people { margin-bottom: 4px; }
 .reports .seg { display: flex; } .reports .seg-btn { flex: 1 1 0; min-width: 0; padding: 8px 4px; font-size: .92rem; line-height: 1.15; }
+input.search { width: 100%; min-height: 48px; padding: 8px 12px; border: 2px solid var(--line); border-radius: 12px; background: #fff; font-size: 1rem; margin: 8px 0; }
+input.search:focus { border-color: var(--red); outline: none; box-shadow: 0 0 0 3px rgba(232,20,12,.18); }
+.ha-tag { display: block; font-size: .72rem; font-weight: 500; color: var(--muted); }
+
+/* Importar hojas INPESCA */
+.inp-card { border: 2px solid var(--line); border-radius: 14px; padding: 12px; background: #fff; display: flex; flex-direction: column; gap: 8px; }
+.inp-card.off { opacity: .55; } .inp-card.warn-card { border-color: var(--mid); background: #FFF9E6; }
+.inp-head { font-size: 1.05rem; } .inp-score { font-size: 1.4rem; }
+.inp-pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .85rem; font-weight: 700; width: fit-content; }
+.inp-pill.ok { background: var(--teal-soft); border: 1px solid var(--teal-line); }
+.dup-box { border: 2px solid var(--mid); border-radius: 10px; padding: 8px 10px; background: #FFF3CC; display: flex; flex-direction: column; gap: 4px; }
+.dup-banner { margin: 10px 0; } .warn-soft { color: #7a4b00; font-size: .92rem; margin: 2px 0; }
+.ok-box { display: flex; flex-direction: column; gap: 6px; }

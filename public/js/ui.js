@@ -71,3 +71,9 @@ export function backBar(title, onBack, right) {
     h('button', { class: 'icon-btn', type: 'button', 'aria-label': t('back'), onclick: onBack }, '←'),
     h('h1', null, title), right || h('span'));
 }
+
+// Caja de búsqueda (sin tildes ni mayúsculas). onInput recibe el texto ya normalizado.
+export function searchBox(placeholder, value, onInput) {
+  return h('input', { type: 'search', class: 'search', placeholder, value: value || '', 'aria-label': placeholder, autocomplete: 'off', enterkeyhint: 'search',
+    oninput: (e) => onInput(e.target.value) });
+}

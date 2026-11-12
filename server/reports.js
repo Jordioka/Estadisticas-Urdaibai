@@ -64,7 +64,7 @@ export async function buildReport(ctx, q) {
   const totals = sumCounters(matches.map((m) => m.counters));
   const pRows = playerStats(events), gRows = goalkeeperStats(events);
   const players_info = await db.all(
-    'SELECT id, name, surname, number, is_goalkeeper FROM players WHERE team_id = ? ORDER BY number, name', q.team_id);
+    'SELECT id, name, surname, number, is_goalkeeper, deleted_at FROM players WHERE team_id = ? ORDER BY number, name', q.team_id);
   // Datos de cada jugador/portero partido a partido (pestaña «Jugadores» de informes)
   const by_match = matches.map((m) => {
     const ev = evBy.get(m.id) || [];

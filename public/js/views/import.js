@@ -6,13 +6,14 @@ import { segmented, field, backBar, errMsg } from '../ui.js';
 import { readFileRows, downloadXlsx, downloadCsv } from '../files.js';
 import { playersTemplate, simpleTemplate, advancedTemplate } from '../templates.js';
 import { currentTeamId } from './home.js';
+import { inpescaPanel } from './import-inpesca.js';
 
-const KINDS = ['players', 'simple', 'advanced'];
+const KINDS = ['inpesca', 'players', 'simple', 'advanced'];
 
 export function importView(root, params = {}) {
   const page = h('div', { class: 'page' });
   root.append(page);
-  const S = { kind: KINDS.includes(params.kind) ? params.kind : 'players', rows: null, fileName: '', report: null, busy: false, error: '',
+  const S = { kind: KINDS.includes(params.kind) ? params.kind : 'inpesca', panel: null, rows: null, fileName: '', report: null, busy: false, error: '',
     defaultTeam: '', ignoreErrors: false, dup: '', createTeams: false, done: null };
   const teamNames = () => state.teams.map((x) => x.name);
   const firstTeam = () => state.teams.find((x) => x.id === currentTeamId())?.name || state.teams[0]?.name || '';
@@ -90,9 +91,17 @@ export function importView(root, params = {}) {
   }
 
   function render() {
+    if (S.kind === 'inpesca') {
+      S.panel = S.panel || inpescaPanel();
+      page.replaceChildren(
+        backBar(t('imp.title'), () => history.back()),
+        segmented(KINDS.map((k) => ({ value: k, label: t(`imp.kind.${k}`) })), S.kind, (v) => { S.kind = v; S.rows = null; S.report = null; S.done = null; S.error = ''; S.fileName = ''; render(); }, t('imp.kind')),
+        h('p', { class: 'muted' }, t('imp.help.inpesca')), S.panel);
+      return;
+    }
     page.replaceChildren(
       backBar(t('imp.title'), () => history.back()),
-      segmented(KINDS.map((k) => ({ value: k, label: t(`imp.kind.${k}`) })), S.kind, (v) => { S.kind = v; S.rows = null; S.report = null; S.done = null; S.error = ''; S.fileName = ''; render(); }, t('imp.kind')),
+      segmented(KINDS.map((k) => ({ value: k, label: t(`imp.kind.${k}`) })), S.kind, (v) => { S.kind = v; S.panel = null; S.rows = null; S.report = null; S.done = null; S.error = ''; S.fileName = ''; render(); }, t('imp.kind')),
       h('p', { class: 'muted' }, t(`imp.help.${S.kind}`)),
       h('div', { class: 'btn-row wrap' },
         h('button', { class: 'btn', type: 'button', onclick: () => downloadXlsx(`${fileBase()}.xlsx`, tpl()) }, '⬇ ', t('imp.tpl_xlsx')),

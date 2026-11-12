@@ -2,7 +2,7 @@
 import { h, toast, fmtDate, today, uid } from '../dom.js';
 import { t } from '../i18n.js';
 import { state, enqueue, rivalName, teamName } from '../store.js';
-import { segmented, field } from '../ui.js';
+import { segmented, field, searchBox } from '../ui.js';
 import { normName } from '../names.js';
 
 const lsGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
@@ -24,6 +24,7 @@ export function teamSelect(onChange) {
 export function homeView(root) {
   const page = h('div', { class: 'page' });
   root.append(page);
+  let q = '';
   const render = () => {
     const team = currentTeamId();
     if (!state.teams.length) {
@@ -31,18 +32,25 @@ export function homeView(root) {
       return;
     }
     const matches = state.matches.filter((m) => m.team_id === team);
-    page.replaceChildren(
-      h('div', { class: 'page-head' }, h('h1', null, t('home.title')), teamSelect(render)),
-      h('a', { class: 'btn primary big', href: '#/new' }, '+ ', t('home.new')),
-      matches.length
-        ? h('div', { class: 'cards' }, matches.map((m) =>
+    const listBox = h('div');
+    const fill = () => {
+      const shown = matches.filter((m) => !q || normName(rivalName(m.rival_id)).includes(normName(q)));
+      listBox.replaceChildren(matches.length
+        ? (shown.length ? h('div', { class: 'cards' }, shown.map((m) =>
           h('a', { class: 'match-card', href: `#/match/${m.id}` },
             h('div', { class: 'mc-date' }, fmtDate(m.date).slice(0, 5), h('span', { class: 'muted small' }, fmtDate(m.date).slice(6))),
             h('div', { class: 'mc-main' }, h('strong', null, `${m.home_away === 'away' ? '@ ' : ''}${rivalName(m.rival_id)}`),
               h('span', { class: 'muted small' }, m.is_practice ? t('practice') : (m.home_away === 'away' ? t('away') : t('home')))),
             h('div', { class: 'mc-score' }, m.counters.goals, '–', m.counters.goals_against),
-            h('span', { class: 'chev' }, '›'))))
+            h('span', { class: 'chev' }, '›')))) : h('p', { class: 'muted center' }, t('search.none')))
         : h('p', { class: 'muted center' }, t('home.empty')));
+    };
+    fill();
+    page.replaceChildren(
+      h('div', { class: 'page-head' }, h('h1', null, t('home.title')), teamSelect(render)),
+      h('a', { class: 'btn primary big', href: '#/new' }, '+ ', t('home.new')),
+      matches.length > 3 ? searchBox(t('search.rival'), q, (v) => { q = v; fill(); }) : null,
+      listBox);
   };
   render();
 }

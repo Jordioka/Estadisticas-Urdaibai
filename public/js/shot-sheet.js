@@ -47,7 +47,7 @@ export function openDetailSheet(opts) {
           ? h('div', { class: 'chips people' },
               h('button', { type: 'button', class: `chip${sel.person === null ? ' on' : ''}`, onclick: () => { sel.person = null; refresh(); } }, isOwn ? t('shot.no_player') : t('shot.no_keeper')),
               people.map((p) => h('button', { type: 'button', class: `chip${sel.person === p.id ? ' on' : ''}`, 'aria-pressed': sel.person === p.id ? 'true' : 'false', onclick: () => { sel.person = p.id; refresh(); } },
-                h('b', null, p.number ?? '·'), ' ', p.name)))
+                h('b', null, p.number ?? '·'), ' ', p.name, p.surname ? ' ' + p.surname : '')))
           : h('p', { class: 'muted small' }, t('shot.no_keepers_hint')));
       const results = type === 'shot_miss' ? MISS_RESULTS_OWN : type === 'shot_against_miss' ? MISS_RESULTS_AGAINST : null;
       resultBox.replaceChildren(results
@@ -105,7 +105,7 @@ export function openPlayerPick({ title, players, onPick, current }) {
     title,
     body: h('div', { class: 'chips people' },
       h('button', { type: 'button', class: `chip wide${current == null ? ' on' : ''}`, onclick: () => { s.close(); onPick(null); } }, t('shot.team_only')),
-      players.map((p) => h('button', { type: 'button', class: `chip${current === p.id ? ' on' : ''}`, onclick: () => { s.close(); onPick(p.id); } }, h('b', null, p.number ?? '·'), ' ', p.name))),
+      players.map((p) => h('button', { type: 'button', class: `chip${current === p.id ? ' on' : ''}`, onclick: () => { s.close(); onPick(p.id); } }, h('b', null, p.number ?? '·'), ' ', p.name, p.surname ? ' ' + p.surname : ''))),
   });
   return s;
 }
