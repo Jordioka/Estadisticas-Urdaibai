@@ -46,10 +46,13 @@ export function warningsBox(counters) {
 }
 
 export function segmented(options, value, onChange, label) {
-  const el = h('div', { class: 'seg', role: 'group', 'aria-label': label || '' }, options.map((o) =>
+  const btns = options.map((o) =>
     h('button', { type: 'button', class: `seg-btn${o.value === value ? ' on' : ''}`, 'aria-pressed': o.value === value ? 'true' : 'false',
-      onclick: () => onChange(o.value) }, o.label)));
-  return el;
+      onclick: () => {
+        btns.forEach((b, i) => { const on = options[i].value === o.value; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+        onChange(o.value);
+      } }, o.label));
+  return h('div', { class: 'seg', role: 'group', 'aria-label': label || '' }, btns);
 }
 
 export function field(label, control, hint) {

@@ -114,7 +114,7 @@ export const D = {
   'pos.Portero': ['Portero', 'Atezaina'], 'pos.Extremo': ['Extremo', 'Hegala'], 'pos.Lateral': ['Lateral', 'Alboa'], 'pos.Central': ['Central', 'Erdilaria'], 'pos.Pivote': ['Pivote', 'Pibota'],
   // --- exportar / informes
   'export.pdf': ['PDF / imprimir', 'PDF / inprimatu'], 'export.xlsx': ['Excel', 'Excel'], 'export.csv': ['CSV', 'CSV'],
-  'rep.title': ['Informes', 'Txostenak'], 'rep.tab.matches': ['Por partidos', 'Partiduka'], 'rep.tab.season': ['Temporada', 'Denboraldia'], 'rep.tab.match': ['Un partido', 'Partidu bat'],
+  'rep.title': ['Informes', 'Txostenak'], 'rep.tab.matches': ['Por partidos', 'Partiduka'], 'rep.tab.season': ['Temporada', 'Denboraldia'], 'rep.tab.match': ['Un partido', 'Partidu bat'], 'rep.tab.players': ['Jugadores', 'Jokalariak'], 'rep.all_players': ['Todos', 'Denak'], 'rep.pick_player': ['Jugador/a', 'Jokalaria'], 'tbl.detail': ['detalle', 'xehetasuna'], 'rep.player_none': ['Sin datos de este jugador/a en estos partidos.', 'Ez dago jokalari honen daturik partidu hauetan.'],
   'rep.season': ['Temporada', 'Denboraldia'], 'rep.all_seasons': ['Todas', 'Denak'], 'rep.filters': ['Más filtros', 'Iragazki gehiago'], 'rep.any': ['Todos', 'Denak'], 'rep.from': ['Desde', 'Noiztik'], 'rep.to': ['Hasta', 'Noiz arte'],
   'rep.total': ['TOTAL', 'GUZTIRA'], 'rep.none': ['No hay partidos con estos filtros.', 'Ez dago partidurik iragazki hauekin.'], 'rep.offline': ['Los informes necesitan conexión.', 'Txostenek konexioa behar dute.'],
   'rep.chart': ['Evolución por partido', 'Partiduz partiduko bilakaera'], 'rep.legend': ['Verde, naranja y rojo: objetivos del club. Los totales se calculan sobre las sumas.', 'Berdea, laranja eta gorria: klubaren helburuak. Totalak batuketen gainean kalkulatzen dira.'],

@@ -21,7 +21,7 @@ function defaultSeason() {
 }
 
 function lineChart(matches, thresholds) {
-  const W = 340, H = 190, L = 36, R = 12, T = 12, B = 30;
+  const W = 340, H = 220, L = 36, R = 12, T = 12, B = 60;
   const series = [
     { key: 'off_eff', color: '#1B6B4F', dash: '', label: t('pct.off_eff') },
     { key: 'loss_pct', color: '#9A5B00', dash: '5 3', label: t('pct.loss_pct') },
@@ -34,7 +34,12 @@ function lineChart(matches, thresholds) {
   for (const g of [0, 0.25, 0.5, 0.75, 1]) {
     root.append(svg('line', { x1: L, x2: W - R, y1: y(g), y2: y(g), class: 'grid' }), svg('text', { x: L - 5, y: y(g) + 3, class: 'axis', 'text-anchor': 'end' }, `${g * 100}`));
   }
-  matches.forEach((m, i) => { if (n <= 12 || i % Math.ceil(n / 12) === 0) root.append(svg('text', { x: x(i), y: H - 12, class: 'axis', 'text-anchor': 'middle' }, fmtDate(m.date).slice(0, 5))); });
+  matches.forEach((m, i) => {
+    if (n <= 12 || i % Math.ceil(n / 12) === 0) {
+      const name = m.rival.length > 11 ? `${m.rival.slice(0, 10)}…` : m.rival; // nombre del rival (no la fecha)
+      root.append(svg('text', { x: x(i), y: H - B + 12, class: 'axis', 'text-anchor': 'end', transform: `rotate(-35 ${x(i)} ${H - B + 12})` }, name));
+    }
+  });
   for (const s of series) {
     const pts = matches.map((m, i) => [x(i), y(percentages(m.counters)[s.key])]);
     root.append(svg('polyline', { points: pts.map((p) => p.join(',')).join(' '), fill: 'none', stroke: s.color, 'stroke-width': 2.2, 'stroke-dasharray': s.dash }));
@@ -50,6 +55,7 @@ export function reportsView(root) {
   const S = Object.assign({ tab: 'matches', season: defaultSeason(), rival: '', from: '', to: '', ha: '' }, lsGet('urd.rep', {}));
   if (!state.seasons.some((s) => s.id === S.season)) S.season = defaultSeason();
   let report = null, busy = false, error = '';
+  let playerSel = lsGet('urd.rep.player', '');
 
   async function load() {
     busy = true; error = ''; render();
@@ -109,6 +115,33 @@ export function reportsView(root) {
       h('tbody', null, report.matches.map((m) => row(fmtDate(m.date).slice(0, 5), m.rival, m.counters, false)), row(t('rep.total'), '', report.totals, true))));
   }
 
+  // Pestaña «Jugadores»: todos juntos o uno elegido partido a partido
+  function playersTab() {
+    const info = report.players_info.filter((p) => report.players.rows.some((r) => r.player_id === p.id) || report.goalkeepers.rows.some((r) => r.player_id === p.id));
+    if (!info.length) return h('p', { class: 'muted center' }, t('rep.player_none'));
+    if (!info.some((p) => p.id === playerSel)) playerSel = '';
+    const pick = h('div', { class: 'chips people no-print' },
+      h('button', { type: 'button', class: `chip${playerSel === '' ? ' on' : ''}`, onclick: () => { playerSel = ''; lsSet('urd.rep.player', ''); render(); } }, t('rep.all_players')),
+      info.map((p) => h('button', { type: 'button', class: `chip${playerSel === p.id ? ' on' : ''}`, onclick: () => { playerSel = p.id; lsSet('urd.rep.player', p.id); render(); } }, h('b', null, p.number ?? '·'), ' ', p.name)));
+    if (!playerSel) return [pick, playersTable(report.players, nameOf), keepersTable(report.goalkeepers, nameOf)];
+    const label = (m) => `${m.rival} ${fmtDate(m.date).slice(0, 5)}`;
+    const mById = new Map(report.matches.map((m) => [m.id, m]));
+    const rowsP = [], rowsK = [];
+    for (const bm of report.by_match) {
+      const m = mById.get(bm.match_id);
+      const p = bm.players.find((r) => r.player_id === playerSel), k = bm.keepers.find((r) => r.player_id === playerSel);
+      if (p) rowsP.push({ ...p, player_id: bm.match_id });
+      if (k) rowsK.push({ ...k, player_id: bm.match_id });
+    }
+    const totP = report.players.rows.find((r) => r.player_id === playerSel), totK = report.goalkeepers.rows.find((r) => r.player_id === playerSel);
+    if (totP) rowsP.push({ ...totP, player_id: '__total' });
+    if (totK) rowsK.push({ ...totK, player_id: '__total' });
+    const name = (id) => (id === '__total' ? t('rep.total') : label(mById.get(id)));
+    return [pick,
+      playersTable({ rows: rowsP, caption: `${nameOf(playerSel)} · ${t('tbl.players')}` }, name),
+      keepersTable({ rows: rowsK, caption: `${nameOf(playerSel)} · ${t('tbl.keepers')}` }, name)];
+  }
+
   function bestWorst() {
     const ms = report.matches;
     const defs = [['off_eff', true, (c) => c.possessions > 0], ['loss_pct', false, (c) => c.possessions > 0], ['shot_eff', true, (c) => c.shots > 0], ['save_pct', true, (c) => c.saves + c.goals_against > 0]];
@@ -140,6 +173,7 @@ export function reportsView(root) {
         h('h2', null, t('maps.title')), mapsBlock(report.zones, report.cells, true),
       ] : h('p', { class: 'muted center' }, t('rep.none'));
     }
+    if (S.tab === 'players') return report.matches.length ? playersTab() : h('p', { class: 'muted center' }, t('rep.none'));
     return report.matches.length
       ? h('div', { class: 'cards' }, [...report.matches].reverse().map((m) => h('a', { class: 'match-card', href: `#/summary/${m.id}` },
         h('div', { class: 'mc-date' }, fmtDate(m.date).slice(0, 5)), h('div', { class: 'mc-main' }, h('strong', null, m.rival)),
@@ -160,7 +194,7 @@ export function reportsView(root) {
             field(t('rival'), h('select', { onchange: (e) => { S.rival = e.target.value; load(); } }, h('option', { value: '' }, t('rep.any')), ...state.rivals.map((r) => h('option', { value: r.id, selected: r.id === S.rival }, r.name)))),
             h('div', { class: 'two' }, field(t('rep.from'), h('input', { type: 'date', value: S.from, onchange: (e) => { S.from = e.target.value; load(); } })), field(t('rep.to'), h('input', { type: 'date', value: S.to, onchange: (e) => { S.to = e.target.value; load(); } }))),
             segmented([{ value: '', label: t('rep.any') }, { value: 'home', label: t('home') }, { value: 'away', label: t('away') }], S.ha, (v) => { S.ha = v; load(); })))),
-      segmented(['matches', 'season', 'match'].map((k) => ({ value: k, label: t(`rep.tab.${k}`) })), S.tab, (v) => { S.tab = v; lsSet('urd.rep', S); render(); }, t('rep.title')),
+      segmented(['matches', 'season', 'players', 'match'].map((k) => ({ value: k, label: t(`rep.tab.${k}`) })), S.tab, (v) => { S.tab = v; lsSet('urd.rep', S); render(); }, t('rep.title')),
       body(),
       report && report.matches.length ? h('div', { class: 'btn-row wrap no-print' },
         h('button', { class: 'btn primary', type: 'button', onclick: () => window.print() }, t('export.pdf')),

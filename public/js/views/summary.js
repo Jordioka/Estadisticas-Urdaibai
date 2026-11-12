@@ -125,7 +125,7 @@ export async function summaryView(root, { id }) {
     const pend = ev.filter(isPending).length;
     const rival = m.rival || rivalName(m.rival_id);
     screen.replaceChildren(
-      backBar(`${rival} · ${fmtDate(m.date)}`, () => (location.hash = '#/'), h('button', { class: 'btn small', type: 'button', onclick: editMatch }, t('edit'))),
+      backBar(`${m.home_away === 'away' ? '@ ' : ''}${rival} · ${fmtDate(m.date)} · ${m.home_away === 'away' ? t('away') : t('home')}`, () => (location.hash = '#/'), h('button', { class: 'btn small', type: 'button', onclick: editMatch }, t('edit'))),
       h('div', { class: 'row-actions' },
         h('a', { class: 'btn primary', href: `#/match/${id}` }, t('go_annotate')),
         h('button', { class: 'btn', type: 'button', onclick: () => window.print() }, t('export.pdf'))),

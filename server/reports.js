@@ -65,6 +65,11 @@ export async function buildReport(ctx, q) {
   const pRows = playerStats(events), gRows = goalkeeperStats(events);
   const players_info = await db.all(
     'SELECT id, name, surname, number, is_goalkeeper FROM players WHERE team_id = ? ORDER BY number, name', q.team_id);
+  // Datos de cada jugador/portero partido a partido (pestaña «Jugadores» de informes)
+  const by_match = matches.map((m) => {
+    const ev = evBy.get(m.id) || [];
+    return { match_id: m.id, players: playerStats(ev).filter((r) => r.player_id), keepers: goalkeeperStats(ev).filter((r) => r.player_id) };
+  });
   const row = await db.first("SELECT value FROM settings WHERE key = 'thresholds'");
   let thresholds = DEFAULT_THRESHOLDS;
   try { if (row) thresholds = { ...DEFAULT_THRESHOLDS, ...JSON.parse(row.value) }; } catch { /* valores por defecto */ }
@@ -73,6 +78,6 @@ export async function buildReport(ctx, q) {
     matches, totals,
     players: { rows: pRows.filter((r) => r.player_id), unassigned: unassignedPlayers(totals, pRows) },
     goalkeepers: { rows: gRows.filter((r) => r.player_id), unassigned: unassignedGoalkeepers(totals, gRows) },
-    zones: zoneStats(events), cells: cellStats(events), players_info, thresholds,
+    zones: zoneStats(events), cells: cellStats(events), players_info, by_match, thresholds,
   };
 }
