@@ -4,25 +4,31 @@ import { t } from '../i18n.js';
 import { state, getMatch, setLive, enqueue, playersOf, rivalName, playerLabel } from '../store.js';
 import {
   totalCounters, percentages, gradeAll, isPending, playerStats, goalkeeperStats, zoneStats, cellStats, unassignedPlayers, unassignedGoalkeepers,
-  EVENT_TYPES, SHOT_TYPES_ALL, ZONES, ratio,
+  EVENT_TYPES, SHOT_TYPES_ALL, ZONES, ratio, SUBTYPES, OWN_SHOT_TYPES,
 } from '../stats.js';
 import { countersGrid, percentBlock, warningsBox, pill, segmented, field, backBar, errMsg } from '../ui.js';
-import { openShotSheet, openPlayerPick } from '../shot-sheet.js';
+import { openDetailSheet, openPlayerPick } from '../shot-sheet.js';
 import { playersTable, keepersTable, mapsBlock } from './tables.js';
 
 const hhmm = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
+const PLAYER_TYPES = ['possession', 'loss', 'goal', 'shot_miss', 'recovery', 'sanction'];
+const KEEPER_TYPES = ['goal_against', 'save', 'shot_against_miss', 'counter_pass'];
+
 // Cambia el tipo de un evento limpiando lo que ya no tiene sentido
 function retype(ev, type) {
   const shot = SHOT_TYPES_ALL.includes(type);
+  const subs = SUBTYPES[type];
   return {
     type,
     zone: shot ? ev.zone : null,
     goal_cell: ['goal', 'goal_against', 'save'].includes(type) ? ev.goal_cell : null,
     result: null,
-    player_id: ['possession', 'loss', 'goal', 'shot_miss'].includes(type) ? ev.player_id : null,
-    goalkeeper_id: ['goal_against', 'save'].includes(type) ? ev.goalkeeper_id : null,
+    player_id: PLAYER_TYPES.includes(type) ? ev.player_id : null,
+    goalkeeper_id: KEEPER_TYPES.includes(type) ? ev.goalkeeper_id : null,
     shot_type: shot ? ev.shot_type : null, trajectory: shot ? ev.trajectory : null, pressure: shot ? ev.pressure : null,
+    phase: shot ? ev.phase : null,
+    subtype: subs ? (subs.includes(ev.subtype) ? ev.subtype : subs[0]) : null,
   };
 }
 
@@ -42,6 +48,8 @@ export async function summaryView(root, { id }) {
     const bits = [];
     if (ev.player_id) bits.push(nameOf(ev.player_id));
     if (ev.goalkeeper_id) bits.push('🧤 ' + nameOf(ev.goalkeeper_id));
+    if (ev.subtype) bits.push(t(`sub.${ev.subtype}`));
+    if (ev.phase === 'penalti' || ev.phase === 'contraataque') bits.push(t(`phase.${ev.phase}`));
     if (ev.zone) bits.push(t(`zone.${ev.zone}`));
     if (ev.goal_cell) bits.push(`${t('goal.cell')} ${ev.goal_cell}`);
     if (ev.result) bits.push(t(`result.${ev.result}`));
@@ -59,11 +67,20 @@ export async function summaryView(root, { id }) {
           if (tp !== ev.type) enqueue({ op: 'event.update', id: ev.id, match_id: id, fields: retype(ev, tp) });
           s.close(); render();
         } }, t(`ev.${tp}`)))),
+        SUBTYPES[ev.type] && SUBTYPES[ev.type].length > 1 ? h('div', null, h('h3', null, t('ev.subtype')),
+          h('div', { class: 'chips' }, SUBTYPES[ev.type].map((k) => h('button', { type: 'button', class: `chip${k === ev.subtype ? ' on' : ''}`, onclick: () => {
+            if (k !== ev.subtype) enqueue({ op: 'event.update', id: ev.id, match_id: id, fields: { subtype: k } });
+            s.close(); render();
+          } }, t(`sub.${k}`))))) : null,
         h('h3', null, t('part')),
         segmented([{ value: 0, label: '–' }, { value: 1, label: '1ª' }, { value: 2, label: '2ª' }], ev.part || 0, (v) => { enqueue({ op: 'event.update', id: ev.id, match_id: id, fields: { part: v || null } }); s.close(); render(); }),
         isShot
           ? h('button', { class: 'btn', type: 'button', onclick: () => { s.close(); openDetail(ev); } }, isPending(ev) ? t('complete') : t('ev.detail'))
-          : h('button', { class: 'btn', type: 'button', onclick: () => { s.close(); openPlayerPick({ title: t(`ev.${ev.type}`), players: people, current: ev.player_id, onPick: (pid) => { enqueue({ op: 'event.update', id: ev.id, match_id: id, fields: { player_id: pid } }); render(); } }); } }, t('ev.who')),
+          : h('button', { class: 'btn', type: 'button', onclick: () => {
+            s.close();
+            const keeperEv = KEEPER_TYPES.includes(ev.type), f = keeperEv ? 'goalkeeper_id' : 'player_id';
+            openPlayerPick({ title: t(`ev.${ev.type}`), players: keeperEv ? goalkeepers : people, current: ev[f], onPick: (pid) => { enqueue({ op: 'event.update', id: ev.id, match_id: id, fields: { [f]: pid } }); render(); } });
+          } }, t('ev.who')),
         h('button', { class: 'btn danger', type: 'button', onclick: async () => {
           s.close();
           if (await confirmDialog(t('ev.delete_q'), { yes: t('delete'), no: t('cancel'), danger: true })) { enqueue({ op: 'event.delete', id: ev.id, match_id: id }); toast(t('deleted')); render(); }
@@ -72,14 +89,9 @@ export async function summaryView(root, { id }) {
   }
 
   function openDetail(ev) {
-    const side = ['goal', 'shot_miss'].includes(ev.type) ? 'own' : 'against';
-    openShotSheet({
-      side, event: ev, people: side === 'own' ? people : goalkeepers, pendingOfType: () => [],
-      onSave: ({ type, fields }) => {
-        const { type: _t, ...rest } = fields;
-        enqueue({ op: 'event.update', id: ev.id, match_id: id, fields: { type, ...rest } });
-        toast(t('saved')); render();
-      },
+    openDetailSheet({
+      event: ev, title: t(`ev.${ev.type}`), people, keepers: goalkeepers,
+      onSave: (fields) => { enqueue({ op: 'event.update', id: ev.id, match_id: id, fields }); toast(t('saved')); render(); },
     });
   }
 

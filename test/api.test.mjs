@@ -87,7 +87,7 @@ test('DUPLICADOS: reenviar el mismo evento/partido/jugador no duplica nada', asy
   const op = { op: 'event.create', id, match_id: match, type: 'goal', ts: new Date().toISOString() };
   await s.onlyA.sync(op, op, op); // doble toque / reintento de sincronización
   assert.equal((await detail(s.onlyA, match)).events.length, 1);
-  assert.deepEqual(await counters(s.onlyA, match), { possessions: 0, losses: 0, shots: 1, goals: 1, goals_against: 0, shots_against: 0, saves: 0 });
+  assert.deepEqual(await counters(s.onlyA, match), { possessions: 1, losses: 0, shots: 1, goals: 1, goals_against: 0, shots_against: 0, saves: 0 });
   // borrar y reintentar la creación no resucita el evento
   await s.onlyA.sync({ op: 'event.delete', id });
   await s.onlyA.sync(op);
@@ -122,7 +122,7 @@ test('MEZCLA simple + avanzado: un hecho se cuenta una sola vez y completar un p
   let d = await detail(s.onlyA, match);
   assert.equal(d.events.filter(isPending).length, 2); // el gol simple y la parada
   const before = await counters(s.onlyA, match);
-  assert.deepEqual(before, { possessions: 1, losses: 0, shots: 2, goals: 2, goals_against: 1, shots_against: 2, saves: 1 });
+  assert.deepEqual(before, { possessions: 2, losses: 0, shots: 2, goals: 2, goals_against: 1, shots_against: 2, saves: 1 });
   // completar el gol pendiente sobre el MISMO evento
   const r = await s.onlyA.sync({ op: 'event.update', id: g1, fields: { zone: '6M', goal_cell: 8, player_id: pl } });
   assert.ok(r.results[0].ok);
@@ -165,12 +165,12 @@ test('CORRECCIÓN fácil: deshacer, editar, cambiar tipo y ajustar totales', asy
   await s.onlyA.sync({ op: 'event.update', id, fields: { type: 'shot_miss', result: 'out' } }); // me equivoqué: era fallo
   let c = await counters(s.onlyA, match);
   assert.deepEqual([c.goals, c.shots], [0, 1]);
-  // total tecleado: 52 posesiones → ajuste visible
-  await s.onlyA.sync({ op: 'adj.set', match_id: match, stat: 'possessions', delta: 52 });
+  // total tecleado: 52 posesiones (1 ya calculada del lanzamiento) → ajuste visible de +51
+  await s.onlyA.sync({ op: 'adj.set', match_id: match, stat: 'possessions', delta: 51 });
   assert.equal((await counters(s.onlyA, match)).possessions, 52);
-  assert.deepEqual((await detail(s.onlyA, match)).adjustments, [{ stat: 'possessions', delta: 52 }]);
+  assert.deepEqual((await detail(s.onlyA, match)).adjustments, [{ stat: 'possessions', delta: 51 }]);
   await s.onlyA.sync({ op: 'adj.set', match_id: match, stat: 'possessions', delta: 0 });
-  assert.equal((await counters(s.onlyA, match)).possessions, 0);
+  assert.equal((await counters(s.onlyA, match)).possessions, 1);
   // deshacer
   await s.onlyA.sync({ op: 'event.delete', id });
   assert.equal((await counters(s.onlyA, match)).shots, 0);
@@ -250,4 +250,38 @@ test('pantalla de uso: solo el propietario, aunque haya otros administradores', 
   assert.ok(r.data.limits.requests > 0);
   assert.equal((await owner('GET', '/api/bootstrap')).data.user.is_owner, true);
   assert.equal((await other('GET', '/api/bootstrap')).data.user.is_owner, false);
+});
+
+test('vista completa: recuperaciones, 2´, contrapases y penaltis se guardan sin tocar los contadores del equipo', async () => {
+  const s = await scenario();
+  const { match } = await withMatch(s, s.onlyA, s.A);
+  const gk = s.newId('pl'), pl = s.newId('pl');
+  await s.onlyA.sync({ op: 'player.create', id: gk, team_id: s.A.id, name: 'Portero', number: 1, is_goalkeeper: true },
+    { op: 'player.create', id: pl, team_id: s.A.id, name: 'Extremo', number: 11 });
+  const r = await s.onlyA.sync(
+    { op: 'event.create', id: s.newId('ev'), match_id: match, type: 'recovery', player_id: pl, subtype: 'robo', part: 1 },
+    { op: 'event.create', id: s.newId('ev'), match_id: match, type: 'sanction', player_id: pl, subtype: 'dos_min' },
+    { op: 'event.create', id: s.newId('ev'), match_id: match, type: 'loss', player_id: pl, subtype: 'pisando' },
+    { op: 'event.create', id: s.newId('ev'), match_id: match, type: 'counter_pass', goalkeeper_id: gk, subtype: 'fallo' },
+    { op: 'event.create', id: s.newId('ev'), match_id: match, type: 'goal_against', goalkeeper_id: gk, zone: '7M', phase: 'penalti', goal_cell: 3 },
+    { op: 'event.create', id: s.newId('ev'), match_id: match, type: 'shot_against_miss', goalkeeper_id: gk, result: 'out' },
+    // rechazados: sin subtipo, subtipo de otro tipo, portero en un contrapase de jugador
+    { op: 'event.create', id: s.newId('ev'), match_id: match, type: 'recovery', player_id: pl },
+    { op: 'event.create', id: s.newId('ev'), match_id: match, type: 'loss', player_id: pl, subtype: 'robo' },
+    { op: 'event.create', id: s.newId('ev'), match_id: match, type: 'counter_pass', player_id: pl, subtype: 'ok' });
+  assert.deepEqual(r.results.map((x) => !!x.ok), [true, true, true, true, true, true, false, false, false]);
+  const d = await detail(s.onlyA, match);
+  assert.equal(d.events.length, 6);
+  assert.deepEqual(await counters(s.onlyA, match), { possessions: 1, losses: 1, shots: 0, goals: 0, goals_against: 1, shots_against: 2, saves: 0 });
+  assert.equal(d.events.find((e) => e.type === 'recovery').subtype, 'robo');
+  // corregir el subtipo sobre el mismo evento
+  const loss = d.events.find((e) => e.type === 'loss');
+  assert.ok((await s.onlyA.sync({ op: 'event.update', id: loss.id, fields: { subtype: 'pasos' } })).results[0].ok);
+  assert.equal((await detail(s.onlyA, match)).events.find((e) => e.id === loss.id).subtype, 'pasos');
+  // informe de temporada: aparecen en jugadores y porteros
+  const rep = (await s.admin('GET', `/api/reports?team_id=${s.A.id}`)).data;
+  const pr = rep.players.rows.find((x) => x.player_id === pl);
+  assert.deepEqual([pr.steals, pr.two_min, pr.loss_pasos], [1, 1, 1]);
+  const gr = rep.goalkeepers.rows.find((x) => x.player_id === gk);
+  assert.deepEqual([gr.cp_fail, gr.pen_goals, gr.out], [1, 1, 1]);
 });

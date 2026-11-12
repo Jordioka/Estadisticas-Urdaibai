@@ -128,7 +128,7 @@ test('IMPORTAR ESTADÍSTICAS avanzada: una fila por evento, jugadores por dorsal
   assert.equal(dry.matches[0].events, 7);
   await s.admin('POST', M, { kind: 'advanced', rows, dry_run: false });
   const m = (await s.admin('GET', '/api/bootstrap')).data.matches[0];
-  assert.deepEqual(m.counters, { possessions: 1, losses: 1, shots: 2, goals: 1, goals_against: 1, shots_against: 3, saves: 1 });
+  assert.deepEqual(m.counters, { possessions: 3, losses: 1, shots: 2, goals: 1, goals_against: 1, shots_against: 3, saves: 1 });
   // errores: jugador inexistente, evento incoherente
   const bad = (await s.admin('POST', M, { kind: 'advanced', rows: [
     { ...base, Evento: 'gol', Jugador: 99 }, { ...base, Evento: 'perdida', Zona: 'EI' }, { ...base, Evento: 'bailar' },
@@ -170,13 +170,13 @@ test('INFORMES: partido, partidos y temporada coinciden; practice excluido; filt
     assert.deepEqual(m.counters, totalCounters(d.events, d.adjustments));
   }
   assert.equal(rep.totals.goals, 2);
-  assert.equal(rep.totals.possessions, 2 + 1 + 40);
+  assert.equal(rep.totals.possessions, 2 + 2 + 40); // calculadas (goles+fallos+pérdidas) + ajuste
   assert.equal(rep.totals.saves, 2);
   // "Sin asignar": lo que está en el total del equipo y no tiene jugador/portero
   const p = rep.players;
   assert.equal(p.rows.find((r) => r.player_id === pl).goals, 1);
   assert.equal(p.unassigned.goals, 1);
-  assert.equal(p.unassigned.possessions, 43);
+  assert.equal(p.unassigned.possessions, 42);
   assert.equal(rep.goalkeepers.rows[0].saves, 1);
   assert.equal(rep.goalkeepers.unassigned.saves, 1);
   // filtros: rival, fechas, temporada
@@ -192,4 +192,33 @@ test('INFORMES: partido, partidos y temporada coinciden; practice excluido; filt
   assert.equal(rep.cells.against[2].goals_against, 1);
   // permisos
   assert.equal((await c('GET', `/api/reports?team_id=${s.B.id}`)).status, 403);
+});
+
+test('IMPORTAR avanzada (formato Excel del club): Detalle, recuperaciones, 2´, contrapases, penaltis y portero en fuera', async () => {
+  const s = await scenario();
+  await s.admin('POST', P, { dry_run: false, rows: [
+    { Equipo: 'Juvenil Masculino', Nombre: 'Aitor', Dorsal: 7 }, { Equipo: 'Juvenil Masculino', Nombre: 'Unai', Dorsal: 1, Portero: 'sí' }] });
+  const b = { Equipo: 'Juvenil Masculino', Fecha: '2026-11-01', Rival: 'Rival X' };
+  const rows = [
+    { ...b, Parte: 1, Evento: 'gol', Jugador: 7, Fase: 'contraataque' },
+    { ...b, Parte: 1, Evento: 'perdida', Jugador: 7, Detalle: 'falta_ataque' },
+    { ...b, Parte: 1, Evento: 'recuperacion', Jugador: 7, Detalle: 'chapa' },
+    { ...b, Parte: 2, Evento: 'amonestacion', Jugador: 7, Detalle: '2' },
+    { ...b, Parte: 2, Evento: 'contrapase', Portero: 1, Detalle: 'ok' },
+    { ...b, Parte: 2, Evento: 'parada', Portero: 1, Zona: '7M', Fase: 'penalti' },
+    { ...b, Parte: 2, Evento: 'lanzamiento_contrario_fallado', Portero: 1, Resultado: 'fuera' },
+  ];
+  const dry = (await s.admin('POST', M, { kind: 'advanced', rows, dry_run: true })).data;
+  assert.deepEqual(dry.errors, []);
+  assert.equal(dry.matches[0].events, 7);
+  await s.admin('POST', M, { kind: 'advanced', rows, dry_run: false });
+  const rep = (await s.admin('GET', `/api/reports?team_id=${s.A.id}`)).data;
+  assert.deepEqual(rep.totals, { possessions: 2, losses: 1, shots: 1, goals: 1, goals_against: 0, shots_against: 2, saves: 1 });
+  const p = rep.players.rows[0];
+  assert.deepEqual([p.goals_fast, p.loss_falta_ataque, p.blocks, p.two_min], [1, 1, 1, 1]);
+  const g = rep.goalkeepers.rows[0];
+  assert.deepEqual([g.cp_ok, g.pen_saves, g.out], [1, 1, 1]);
+  // un detalle desconocido se rechaza
+  const bad = (await s.admin('POST', M, { kind: 'advanced', rows: [{ ...b, Evento: 'perdida', Jugador: 7, Detalle: 'inventado' }], dry_run: true })).data;
+  assert.equal(bad.errors[0].error, 'invalid_event');
 });

@@ -1,18 +1,56 @@
 // Pantalla de anotación: lo mínimo en pantalla (botones, contadores y deshacer).
-import { h, toast, vibrate, uid, fmtDate, sheet, confirmDialog } from '../dom.js';
+import { h, toast, vibrate, uid, fmtDate, sheet, confirmDialog, choiceDialog } from '../dom.js';
 import { t } from '../i18n.js';
 import { state, getMatch, setLive, enqueue, rivalName, playersOf, flush } from '../store.js';
-import { totalCounters, eventsToCounters, isPending, COUNTERS } from '../stats.js';
+import { totalCounters, eventsToCounters, isPending, SHOT_TYPES_ALL, LOSS_KINDS, REC_KINDS } from '../stats.js';
 import { countersGrid, warningsBox, segmented, errMsg } from '../ui.js';
-import { openShotSheet, openPlayerPick } from '../shot-sheet.js';
+import { openDetailSheet } from '../shot-sheet.js';
 
 const lsGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* nada */ } };
 
 export const ACTIONS = {
-  attack: ['possession', 'goal', 'shot_miss', 'loss'],
+  attack: ['goal', 'shot_miss', 'loss'],
   defense: ['goal_against', 'save', 'shot_against_miss'],
 };
+
+// Vista completa = columnas del Excel del club. grid: pide el punto de la portería (opcional).
+const SHOT_BTNS = [ // LANZAMIENTOS
+  { k: 'goal', label: 'adv.b.goal', type: 'goal', grid: true },
+  { k: 'fast_goal', label: 'adv.b.fast_goal', type: 'goal', phase: 'contraataque', grid: true },
+  { k: 'out', label: 'adv.b.out', type: 'shot_miss', result: 'out' },
+  { k: 'saved', label: 'adv.b.saved', type: 'shot_miss', result: 'save', grid: true },
+  { k: 'fast_miss', label: 'adv.b.fast_miss', type: 'shot_miss', phase: 'contraataque' },
+];
+const LOSS_BTNS = LOSS_KINDS.map((k) => ({ k: `loss_${k}`, label: `sub.${k}`, type: 'loss', subtype: k })); // PÉRDIDAS
+const REC_BTNS = REC_KINDS.map((k) => ({ k: `rec_${k}`, label: `sub.${k}`, type: 'recovery', subtype: k })); // RECUPERACIONES
+const SANC_BTNS = [{ k: 'dos_min', label: 'sub.dos_min', type: 'sanction', subtype: 'dos_min' }]; // AMONESTACIONES
+const GK_BTNS = [ // PORTERO · DURANTE EL JUEGO
+  { k: 'g_save', label: 'adv.b.g_save', type: 'save', grid: true },
+  { k: 'g_goal', label: 'adv.b.g_goal', type: 'goal_against', grid: true },
+  { k: 'g_out', label: 'adv.b.g_out', type: 'shot_against_miss', result: 'out' },
+  { k: 'cp_ok', label: 'sub.ok', type: 'counter_pass', subtype: 'ok' },
+  { k: 'cp_fallo', label: 'sub.fallo', type: 'counter_pass', subtype: 'fallo' },
+];
+const PEN_BTNS = [ // PORTERO · PENALTIS
+  { k: 'p_save', label: 'adv.b.g_save', type: 'save', phase: 'penalti', zone: '7M', grid: true },
+  { k: 'p_goal', label: 'adv.b.g_goal', type: 'goal_against', phase: 'penalti', zone: '7M', grid: true },
+  { k: 'p_out', label: 'adv.b.g_out', type: 'shot_against_miss', result: 'out', phase: 'penalti', zone: '7M' },
+];
+// ¿Este evento cuenta para este botón? (misma clasificación que las tablas de jugadores)
+function matchesBtn(e, d) {
+  if (e.type !== d.type) return false;
+  if (d.subtype && e.subtype !== d.subtype) return false;
+  const fast = e.phase === 'contraataque', pen = e.phase === 'penalti';
+  if (d.type === 'goal') return fast === (d.phase === 'contraataque');
+  if (d.type === 'shot_miss') {
+    if (d.phase === 'contraataque') return fast;
+    return !fast && (d.result === 'save' ? e.result === 'save' : e.result !== 'save');
+  }
+  if (['save', 'goal_against', 'shot_against_miss'].includes(d.type)) return pen === (d.phase === 'penalti');
+  return true;
+}
+const NONE = 'none'; // "Sin jugador"
 
 // Convierte en eventos una acción de equipo (vista simple)
 export function addEventOp(matchId, type, extra = {}, part = null) {
@@ -33,6 +71,10 @@ export async function matchView(root, { id }) {
   let mode = lsGet('urd.mode', 'simple');
   let part = Number(lsGet(`urd.part.${id}`, '0')) || null;
   let last = { type: null, at: 0 };
+  const valid = (v, list) => (v === NONE || list.some((p) => p.id === v) ? v : null);
+  let selPlayer = valid(lsGet(`urd.pl.${id}`, null), teamPlayers);
+  let selKeeper = valid(lsGet(`urd.gk.${id}`, null), goalkeepers) || (goalkeepers.length === 1 ? goalkeepers[0].id : null);
+  let goalDetail = lsGet('urd.gd', '1') === '1'; // pedir el punto de la portería al anotar
 
   const screen = h('div', { class: 'page match' });
   root.append(screen);
@@ -64,34 +106,49 @@ export async function matchView(root, { id }) {
 
   const pendingOfType = (type) => events().filter((e) => isPending(e) && e.type === type);
 
-  function shotFlow(side) {
-    openShotSheet({
-      side, people: side === 'own' ? teamPlayers : goalkeepers, pendingOfType,
-      onSave: ({ type, fields, completeId }) => {
-        const { type: _t, ...rest } = fields;
-        if (completeId) enqueue({ op: 'event.update', id: completeId, match_id: id, fields: { type, ...rest } });
-        else addEventOp(id, type, rest, part);
-        vibrate(); toast(t('noted', { what: t(`ev.${type}`) })); render();
-      },
-    });
+  // Anota (o completa uno "pendiente" de la vista sencilla, sin duplicar)
+  async function commitEvent(d, base, extra = {}) {
+    const fields = { ...base, ...extra };
+    if (SHOT_TYPES_ALL.includes(d.type)) {
+      const pend = pendingOfType(d.type);
+      if (pend.length) {
+        const choice = await choiceDialog(t('shot.is_pending', { n: pend.length, what: t(`ev.${d.type}`).toLowerCase() }),
+          [...pend.slice(0, 6).map((p, i) => ({ value: p.id, label: `${t('shot.yes_pending')} #${i + 1} · ${t(`ev.${p.type}`)}${p.part ? ' · ' + p.part + 'ª' : ''}`, primary: i === 0 })),
+            { value: 'new', label: t('shot.no_new') }], { detail: t('shot.pending_hint') });
+        if (choice === null) return;
+        if (choice !== 'new') {
+          enqueue({ op: 'event.update', id: choice, match_id: id, fields: { type: d.type, ...fields } });
+          vibrate(); toast(t('completed')); render(); return;
+        }
+      }
+    }
+    addEventOp(id, d.type, fields, part);
+    vibrate(); toast(t('noted', { what: d.subtype ? t(`sub.${d.subtype}`) : t(`ev.${d.type}`) })); render();
   }
 
-  function personFlow(type) {
-    openPlayerPick({
-      title: t(`ev.${type}`), players: teamPlayers,
-      onPick: (pid) => { addEventOp(id, type, pid ? { player_id: pid } : {}, part); vibrate(); toast(t('noted', { what: t(`ev.${type}`) })); render(); },
-    });
+  // d = botón; kind = 'player' | 'keeper'
+  async function advTap(d, kind) {
+    const who = kind === 'player' ? selPlayer : selKeeper;
+    const needs = kind === 'player' || goalkeepers.length > 0;
+    if (who == null && needs) { toast(t(kind === 'player' ? 'adv.pick_player' : 'adv.pick_keeper')); return; }
+    const now = Date.now(), key = `${d.k}|${who}`;
+    if (last.type === key && now - last.at < 800) {
+      const ok = await confirmDialog(t('double.q', { what: t(d.label) }), { yes: t('double.yes'), no: t('double.no') });
+      if (!ok) { last.at = Date.now(); return; }
+    }
+    last = { type: key, at: Date.now() };
+    const base = { result: d.result || null, phase: d.phase || null, subtype: d.subtype || null, zone: d.zone || null };
+    const pid = who === NONE ? null : who;
+    if (kind === 'player') base.player_id = pid; else base.goalkeeper_id = pid;
+    if (d.grid && goalDetail) {
+      openDetailSheet({ quick: true, type: d.type, zone: d.zone, title: t(d.label), onSave: (f) => commitEvent(d, base, f) });
+    } else commitEvent(d, base);
   }
 
   function completePending(ev) {
-    const side = ['goal', 'shot_miss'].includes(ev.type) ? 'own' : 'against';
-    openShotSheet({
-      side, event: ev, people: side === 'own' ? teamPlayers : goalkeepers, pendingOfType: () => [],
-      onSave: ({ type, fields }) => {
-        const { type: _t, ...rest } = fields;
-        enqueue({ op: 'event.update', id: ev.id, match_id: id, fields: { type, ...rest } });
-        toast(t('completed')); render();
-      },
+    openDetailSheet({
+      event: ev, title: t(`ev.${ev.type}`), people: teamPlayers, keepers: goalkeepers,
+      onSave: (fields) => { enqueue({ op: 'event.update', id: ev.id, match_id: id, fields }); toast(t('completed')); render(); },
     });
   }
 
@@ -140,13 +197,35 @@ export async function matchView(root, { id }) {
         h('h2', { class: 'grp' }, t('grp.defense')),
         h('div', { class: 'acts' }, ACTIONS.defense.map((tp) => btn(tp, null, () => tap(tp), `a-${tp}`))),
       ]
-      : [
-        h('h2', { class: 'grp' }, t('grp.attack')),
-        h('div', { class: 'acts' },
-          btn('shot', 'adv.shot.h', () => shotFlow('own'), 'a-goal'), btn('loss', null, () => personFlow('loss'), 'a-loss'),
-          btn('possession', null, () => personFlow('possession'), 'a-possession')),
-        h('h2', { class: 'grp' }, t('grp.defense')),
-        h('div', { class: 'acts' }, btn('shot_against', 'adv.shot_against.h', () => shotFlow('against'), 'a-goal_against')),
+      : advancedButtons();
+
+    function advancedButtons() {
+      const count = (d, kind) => {
+        const who = kind === 'player' ? selPlayer : selKeeper;
+        if (who == null) return 0;
+        const f = kind === 'player' ? 'player_id' : 'goalkeeper_id';
+        return events().filter((e) => matchesBtn(e, d) && (who === NONE ? !e[f] : e[f] === who)).length;
+      };
+      const ab = (d, kind) => {
+        const n = count(d, kind);
+        return h('button', { type: 'button', class: `act sm${n ? ' has' : ''}`, onclick: () => advTap(d, kind) },
+          h('span', { class: 'act-l' }, t(d.label)), h('span', { class: 'act-n', 'aria-label': String(n) }, n || ''));
+      };
+      const chipsFor = (list, cur, set, key, noneLabel) => h('div', { class: 'chips people' },
+        list.map((p) => h('button', { type: 'button', class: `chip${cur === p.id ? ' on' : ''}`, 'aria-pressed': cur === p.id ? 'true' : 'false', onclick: () => { set(p.id); lsSet(key, p.id); render(); } }, h('b', null, p.number ?? '·'), ' ', p.name)),
+        noneLabel ? h('button', { type: 'button', class: `chip${cur === NONE ? ' on' : ''}`, 'aria-pressed': cur === NONE ? 'true' : 'false', onclick: () => { set(NONE); lsSet(key, NONE); render(); } }, noneLabel) : null);
+      return [
+        h('div', { class: 'adv-toggle' }, h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: goalDetail, onchange: (e) => { goalDetail = e.target.checked; lsSet('urd.gd', goalDetail ? '1' : '0'); } }), ' ', t('adv.detail_goal'))),
+        h('h2', { class: 'grp' }, t('adv.player')),
+        chipsFor(teamPlayers, selPlayer, (v) => { selPlayer = v; }, `urd.pl.${id}`, t('shot.no_player')),
+        h('h2', { class: 'grp' }, t('adv.shots')), h('div', { class: 'acts' }, SHOT_BTNS.map((d) => ab(d, 'player'))),
+        h('h2', { class: 'grp' }, t('adv.losses')), h('div', { class: 'acts' }, LOSS_BTNS.map((d) => ab(d, 'player'))),
+        h('h2', { class: 'grp' }, t('adv.recoveries')), h('div', { class: 'acts' }, REC_BTNS.map((d) => ab(d, 'player'))),
+        h('h2', { class: 'grp' }, t('adv.sanctions')), h('div', { class: 'acts' }, SANC_BTNS.map((d) => ab(d, 'player'))),
+        h('h2', { class: 'grp' }, t('adv.keeper')),
+        goalkeepers.length ? chipsFor(goalkeepers, selKeeper, (v) => { selKeeper = v; }, `urd.gk.${id}`, null) : h('p', { class: 'muted small' }, t('shot.no_keepers_hint')),
+        h('h3', { class: 'sub' }, t('adv.game')), h('div', { class: 'acts' }, GK_BTNS.map((d) => ab(d, 'keeper'))),
+        h('h3', { class: 'sub' }, t('adv.penalties')), h('div', { class: 'acts' }, PEN_BTNS.map((d) => ab(d, 'keeper'))),
         pend.length ? h('div', { class: 'pending' },
           h('h2', { class: 'grp' }, t('pending.title', { n: pend.length })),
           h('p', { class: 'muted small' }, t('pending.hint')),
@@ -154,6 +233,7 @@ export async function matchView(root, { id }) {
             h('span', null, t(`ev.${ev.type}`), ev.part ? ` · ${ev.part}ª` : ''),
             h('button', { class: 'btn small', type: 'button', onclick: () => completePending(ev) }, t('complete'))))) : null,
       ];
+    }
 
     screen.replaceChildren(
       h('div', { class: 'subbar' },

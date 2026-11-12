@@ -78,11 +78,17 @@ export function reportsView(root) {
   const fileName = (ext) => `informe-${teamName(currentTeamId()).replace(/\s+/g, '-')}.${ext}`;
   async function exportXlsx() {
     const sheets = [{ name: t('rep.tab.matches'), aoa: matchRows(), widths: [12, 22, ...COLS.map(() => 11), ...PCTS.map(() => 16)] }];
-    if (report.players.rows.length) sheets.push({ name: t('tbl.players'), aoa: [[t('pl.title'), t('stat.goals'), t('stat.shots'), t('stat.losses'), t('stat.possessions')],
-      ...report.players.rows.map((r) => [nameOf(r.player_id), r.goals, r.shots, r.losses, r.possessions]),
-      [t('unassigned'), ...['goals', 'shots', 'losses', 'possessions'].map((k) => report.players.unassigned[k])]], widths: [26, 10, 14, 10, 12] });
-    if (report.goalkeepers.rows.length) sheets.push({ name: t('tbl.keepers'), aoa: [[t('pl.gk'), t('stat.saves'), t('stat.goals_against'), t('pct.save_pct')],
-      ...[...report.goalkeepers.rows, { ...report.goalkeepers.unassigned, player_id: null }].map((r) => [r.player_id ? nameOf(r.player_id) : t('unassigned'), r.saves, r.goals_against, Number((r.save_pct * 100).toFixed(1))])], widths: [26, 10, 16, 14] });
+    if (report.players.rows.length) {
+      const ks = ['goals', 'goals_fast', 'miss_out', 'miss_saved', 'miss_fast', 'shots', 'loss_pase', 'loss_pisando', 'loss_falta_ataque', 'loss_pasos', 'losses', 'steals', 'blocks', 'two_min', 'possessions'];
+      const heads = [t('pl.title'), t('stat.goals'), t('adv.b.fast_goal'), t('adv.b.out'), t('adv.b.saved'), t('adv.b.fast_miss'), t('col.shots'),
+        t('sub.pase'), t('sub.pisando'), t('sub.falta_ataque'), t('sub.pasos'), t('col.losses'), t('sub.robo'), t('sub.chapa'), t('sub.dos_min'), t('col.poss')];
+      sheets.push({ name: t('tbl.players'), aoa: [heads,
+        ...report.players.rows.map((r) => [nameOf(r.player_id), ...ks.map((k) => r[k] ?? 0)]),
+        [t('unassigned'), ...['goals', 'shots', 'losses', 'possessions'].map((k) => report.players.unassigned[k])]].map((row, i) => (i === 0 || row.length === heads.length ? row : [row[0], row[1], '', '', '', '', row[2], '', '', '', '', row[3], '', '', '', row[4]])),
+        widths: [26, 8, 10, 12, 10, 12, 10, 8, 9, 10, 8, 10, 8, 8, 6, 10] });
+    }
+    if (report.goalkeepers.rows.length) sheets.push({ name: t('tbl.keepers'), aoa: [[t('pl.gk'), t('stat.saves'), t('stat.goals_against'), t('adv.b.g_out'), t('pct.save_pct'), `${t('col.pen')} ${t('adv.b.g_save')}`, `${t('col.pen')} ${t('adv.b.g_goal')}`, `${t('col.pen')} ${t('adv.b.g_out')}`, t('sub.ok'), t('sub.fallo')],
+      ...[...report.goalkeepers.rows, { ...report.goalkeepers.unassigned, player_id: null }].map((r) => [r.player_id ? nameOf(r.player_id) : t('unassigned'), r.saves, r.goals_against, r.out ?? '', Number((r.save_pct * 100).toFixed(1)), r.pen_saves ?? '', r.pen_goals ?? '', r.pen_out ?? '', r.cp_ok ?? '', r.cp_fail ?? ''])], widths: [26, 10, 16, 12, 14, 12, 12, 12, 14, 14] });
     await downloadXlsx(fileName('xlsx'), sheets);
   }
 

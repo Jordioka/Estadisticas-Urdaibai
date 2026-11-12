@@ -7,19 +7,19 @@ import {
 
 const ev = (type, extra = {}) => ({ type, ...extra });
 
-test('relaciones automáticas: gol→lanzamiento, parada/gol en contra→lanzamiento contrario; posesión nunca automática', () => {
+test('relaciones automáticas: gol→lanzamiento, parada/gol en contra→lanzamiento contrario; las posesiones se calculan solas (gol + fallo + pérdida)', () => {
   const c = eventsToCounters([
     ev('goal'), ev('goal'), ev('shot_miss'), ev('loss'), ev('possession'),
     ev('goal_against'), ev('save'), ev('save'), ev('shot_against_miss'),
   ]);
-  assert.deepEqual(c, { possessions: 1, losses: 1, shots: 3, goals: 2, goals_against: 1, shots_against: 4, saves: 2 });
+  assert.deepEqual(c, { possessions: 4, losses: 1, shots: 3, goals: 2, goals_against: 1, shots_against: 4, saves: 2 });
 });
 
 test('eventos borrados no cuentan; ajustes suman sobre eventos', () => {
   const c = totalCounters([ev('goal'), ev('goal', { deleted_at: 'x' })], [{ stat: 'possessions', delta: 40 }, { stat: 'goals', delta: 2 }]);
   assert.equal(c.goals, 3);
   assert.equal(c.shots, 1);
-  assert.equal(c.possessions, 40);
+  assert.equal(c.possessions, 41);
 });
 
 test('% de paradas = paradas ÷ (goles en contra + paradas), no ÷ lanzamientos contrarios', () => {
@@ -94,10 +94,46 @@ test('validación de eventos', () => {
   assert.equal(validateEvent({ type: 'shot_against_miss', result: 'save' }), 'result');
 });
 
-test('pendientes de completar: lanzamientos sin zona', () => {
-  assert.equal(isPending({ type: 'goal', zone: null }), true);
-  assert.equal(isPending({ type: 'goal', zone: 'EI' }), false);
-  assert.equal(isPending({ type: 'loss', zone: null }), false);
+test('pendientes de completar: lanzamientos propios sin jugador / en contra sin portero', () => {
+  assert.equal(isPending({ type: 'goal', player_id: null }), true);
+  assert.equal(isPending({ type: 'goal', player_id: 'a' }), false);
+  assert.equal(isPending({ type: 'goal', player_id: 'a', zone: null }), false); // la zona ya no hace falta
+  assert.equal(isPending({ type: 'save', goalkeeper_id: null }), true);
+  assert.equal(isPending({ type: 'save', goalkeeper_id: 'g' }), false);
+  assert.equal(isPending({ type: 'loss', player_id: null }), false);
+});
+
+test('vista completa (Excel): subtipos, recuperaciones, 2´, contrapases y penaltis', () => {
+  assert.equal(validateEvent({ type: 'loss', player_id: 'a', subtype: 'pisando' }), null);
+  assert.equal(validateEvent({ type: 'loss', subtype: 'robo' }), 'subtype');
+  assert.equal(validateEvent({ type: 'recovery', player_id: 'a', subtype: 'chapa' }), null);
+  assert.equal(validateEvent({ type: 'recovery', player_id: 'a' }), 'subtype'); // el subtipo es obligatorio
+  assert.equal(validateEvent({ type: 'sanction', player_id: 'a', subtype: 'dos_min' }), null);
+  assert.equal(validateEvent({ type: 'counter_pass', goalkeeper_id: 'g', subtype: 'ok' }), null);
+  assert.equal(validateEvent({ type: 'counter_pass', player_id: 'a', subtype: 'ok' }), 'player');
+  assert.equal(validateEvent({ type: 'goal', subtype: 'ok' }), 'subtype');
+  assert.equal(validateEvent({ type: 'shot_against_miss', goalkeeper_id: 'g', result: 'out', phase: 'penalti', zone: '7M' }), null);
+  // ni las recuperaciones, ni los 2´, ni los contrapases tocan los contadores del equipo
+  const evs = [ev('recovery', { player_id: 'a', subtype: 'robo' }), ev('sanction', { player_id: 'a', subtype: 'dos_min' }), ev('counter_pass', { goalkeeper_id: 'g', subtype: 'ok' })];
+  assert.deepEqual(eventsToCounters(evs), { possessions: 0, losses: 0, shots: 0, goals: 0, goals_against: 0, shots_against: 0, saves: 0 });
+});
+
+test('estadística por jugador y portero como el Excel', () => {
+  const evs = [
+    ev('goal', { player_id: 'a' }), ev('goal', { player_id: 'a', phase: 'contraataque' }),
+    ev('shot_miss', { player_id: 'a', result: 'out' }), ev('shot_miss', { player_id: 'a', result: 'save' }), ev('shot_miss', { player_id: 'a', phase: 'contraataque' }),
+    ev('loss', { player_id: 'a', subtype: 'pase' }), ev('loss', { player_id: 'a', subtype: 'pasos' }), ev('loss', { player_id: 'a' }),
+    ev('recovery', { player_id: 'a', subtype: 'robo' }), ev('recovery', { player_id: 'a', subtype: 'chapa' }), ev('recovery', { player_id: 'a', subtype: 'chapa' }),
+    ev('sanction', { player_id: 'a', subtype: 'dos_min' }),
+    ev('save', { goalkeeper_id: 'g' }), ev('save', { goalkeeper_id: 'g', phase: 'penalti' }), ev('goal_against', { goalkeeper_id: 'g' }),
+    ev('goal_against', { goalkeeper_id: 'g', phase: 'penalti' }), ev('shot_against_miss', { goalkeeper_id: 'g', result: 'out' }), ev('shot_against_miss', { goalkeeper_id: 'g', result: 'out', phase: 'penalti' }),
+    ev('counter_pass', { goalkeeper_id: 'g', subtype: 'ok' }), ev('counter_pass', { goalkeeper_id: 'g', subtype: 'fallo' }),
+  ];
+  const p = playerStats(evs).find((r) => r.player_id === 'a');
+  assert.deepEqual([p.goals, p.goals_fast, p.shots, p.miss_out, p.miss_saved, p.miss_fast], [2, 1, 5, 1, 1, 1]);
+  assert.deepEqual([p.losses, p.loss_pase, p.loss_pasos, p.steals, p.blocks, p.two_min], [3, 1, 1, 1, 2, 1]);
+  const g = goalkeeperStats(evs).find((r) => r.player_id === 'g');
+  assert.deepEqual([g.saves, g.pen_saves, g.goals_against, g.pen_goals, g.out, g.pen_out, g.cp_ok, g.cp_fail], [2, 1, 2, 1, 2, 1, 1, 1]);
 });
 
 test('estadística por jugador y portero (% de paradas del portero = paradas ÷ (paradas + encajados))', () => {

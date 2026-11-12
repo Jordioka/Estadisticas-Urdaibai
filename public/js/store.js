@@ -145,7 +145,7 @@ function applyLocal(op) {
       if (op.op === 'event.create') {
         if (!d.events.some((e) => e.id === op.id)) {
           const { op: _o, ts, ...rest } = op;
-          d.events.push({ part: null, minute: null, player_id: null, goalkeeper_id: null, zone: null, goal_cell: null, result: null, shot_type: null, trajectory: null, pressure: null, phase: null, ...rest, created_at: ts || new Date().toISOString(), deleted_at: null });
+          d.events.push({ part: null, minute: null, player_id: null, goalkeeper_id: null, zone: null, goal_cell: null, result: null, shot_type: null, trajectory: null, pressure: null, phase: null, subtype: null, ...rest, created_at: ts || new Date().toISOString(), deleted_at: null });
         }
       } else if (op.op === 'event.update') {
         const e = d.events.find((x) => x.id === op.id);

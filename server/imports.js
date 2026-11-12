@@ -40,6 +40,7 @@ const ALIAS = {
   trajectory: ['trayectoria', 'trajectory'],
   pressure: ['presion', 'pressure'],
   phase: ['fase', 'phase'],
+  subtype: ['detalle', 'detail', 'subtipo', 'xehetasuna'],
   possessions: ['posesiones', 'possessions', 'posesioak'],
   losses: ['perdidas', 'losses', 'galerak'],
   shots: ['lanzamientos', 'shots', 'jaurtiketak'],
@@ -209,6 +210,13 @@ const EVENT_MAP = {
   posesion: 'possession', perdida: 'loss', gol: 'goal',
   lanzamientofallado: 'shot_miss', golencontra: 'goal_against', parada: 'save',
   lanzamientocontrariofallado: 'shot_against_miss',
+  recuperacion: 'recovery', amonestacion: 'sanction', contrapase: 'counter_pass',
+};
+const SUBTYPE_MAP = { // sinónimos admitidos en la columna "Detalle"
+  pase: 'pase', pases: 'pase', pisando: 'pisando', faltaataque: 'falta_ataque', fataque: 'falta_ataque', pasos: 'pasos',
+  robo: 'robo', robos: 'robo', chapa: 'chapa', chapas: 'chapa',
+  '2': 'dos_min', '2min': 'dos_min', dosmin: 'dos_min', dosminutos: 'dos_min',
+  ok: 'ok', bien: 'ok', fallo: 'fallo', mal: 'fallo',
 };
 const RESULT_MAP = { parada: 'save', fuera: 'out', poste: 'post', bloqueo: 'block' };
 
@@ -285,7 +293,7 @@ export async function importMatches(ctx, body) {
       const type = EVENT_MAP[evKey];
       if (!type) { err('invalid_event_type'); g.invalid = true; continue; }
       const e = { type, part: null, minute: null, player_id: null, goalkeeper_id: null, zone: null, goal_cell: null, result: null,
-        shot_type: null, trajectory: null, pressure: null, phase: null };
+        shot_type: null, trajectory: null, pressure: null, phase: null, subtype: null };
       const players = await teamPlayers(t.team.id);
       const part = A('part'); if (part != null) e.part = Number(part);
       const minute = A('minute'); if (minute != null) e.minute = Number(minute);
@@ -298,6 +306,11 @@ export async function importMatches(ctx, body) {
       }
       for (const [f, n] of [['shot_type', 'shot_type'], ['trajectory', 'trajectory'], ['pressure', 'pressure'], ['phase', 'phase']]) {
         const v = A(n); if (v != null) e[f] = normName(v).replace(/ /g, '_');
+      }
+      const sub = A('subtype');
+      if (sub != null) {
+        e.subtype = SUBTYPE_MAP[key(sub)];
+        if (!e.subtype) { err('invalid_event', { field: 'subtype' }); g.invalid = true; continue; }
       }
       const pl = A('player');
       if (pl != null) {
@@ -366,9 +379,9 @@ export async function importMatches(ctx, body) {
       g.events.forEach((e, n) => {
         const ts = new Date(Date.parse(now) + n).toISOString(); // conserva el orden del archivo
         stmts.push(ctx.db.stmt(
-          `INSERT INTO events (id, match_id, type, part, minute, player_id, goalkeeper_id, zone, goal_cell, result, shot_type, trajectory, pressure, phase, created_by, created_at, updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-          uuid(), mid, e.type, e.part, e.minute, e.player_id, e.goalkeeper_id, e.zone, e.goal_cell, e.result, e.shot_type, e.trajectory, e.pressure, e.phase, ctx.user.id, ts, ts));
+          `INSERT INTO events (id, match_id, type, part, minute, player_id, goalkeeper_id, zone, goal_cell, result, shot_type, trajectory, pressure, phase, subtype, created_by, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          uuid(), mid, e.type, e.part, e.minute, e.player_id, e.goalkeeper_id, e.zone, e.goal_cell, e.result, e.shot_type, e.trajectory, e.pressure, e.phase, e.subtype, ctx.user.id, ts, ts));
       });
     }
     await ctx.db.batch(stmts);

@@ -209,3 +209,14 @@ td.g-strong { background: var(--strong-bg); } td.g-light { background: var(--lig
 .area6 { fill: #E4ECEF; } .zone-pick { text-align: center; font-weight: 700; margin: 4px 0 0; min-height: 1.5em; color: var(--muted); } .zone-pick.on { color: var(--ink); }
 
 .zone:focus-visible, .goal-cell:focus-visible { filter: brightness(.94); }
+
+/* Vista completa (como el Excel) */
+.act.sm { flex-direction: row; align-items: center; justify-content: space-between; min-height: 58px; padding: 8px 12px; background: #fff; }
+.act.sm .act-l { font-size: 1rem; }
+.act.sm.has { background: var(--teal-soft); border-color: var(--teal-line); }
+.act-n { min-width: 1.6em; text-align: center; font-weight: 800; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.sub { font-size: .9rem; color: var(--muted); margin: 12px 0 6px; }
+.adv-toggle { margin: 4px 0 0; display: flex; justify-content: flex-end; font-size: .9rem; }
+.check { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; cursor: pointer; }
+.sticky-save { position: sticky; bottom: 0; background: #fff; padding: 10px 0 calc(10px + var(--safe-b)); margin-top: 10px; }
+.chips.people { margin-bottom: 4px; }
