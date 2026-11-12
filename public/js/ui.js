@@ -77,3 +77,12 @@ export function searchBox(placeholder, value, onInput) {
   return h('input', { type: 'search', class: 'search', placeholder, value: value || '', 'aria-label': placeholder, autocomplete: 'off', enterkeyhint: 'search',
     oninput: (e) => onInput(e.target.value) });
 }
+
+// Permite soltar un archivo sobre un elemento (ordenador); en el móvil sigue funcionando el botón de elegir archivo
+export function dropZone(el, onFile) {
+  const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+  ['dragenter', 'dragover'].forEach((ev) => el.addEventListener(ev, (e) => { stop(e); el.classList.add('drag'); }));
+  ['dragleave', 'dragend'].forEach((ev) => el.addEventListener(ev, (e) => { stop(e); el.classList.remove('drag'); }));
+  el.addEventListener('drop', (e) => { stop(e); el.classList.remove('drag'); const f = e.dataTransfer?.files?.[0]; if (f) onFile(f); });
+  return el;
+}

@@ -1,7 +1,8 @@
 // Pantalla de anotación: lo mínimo en pantalla (botones, contadores y deshacer).
 import { h, toast, vibrate, uid, fmtDate, sheet, confirmDialog, choiceDialog } from '../dom.js';
 import { t } from '../i18n.js';
-import { state, getMatch, setLive, enqueue, rivalName, playersOf, flush } from '../store.js';
+import { state, getMatch, setLive, enqueue, rivalName, playersOf, squadOf, flush } from '../store.js';
+import { keepAwake } from '../prefs.js';
 import { totalCounters, eventsToCounters, isPending, SHOT_TYPES_ALL, LOSS_KINDS, REC_KINDS } from '../stats.js';
 import { countersGrid, warningsBox, segmented, errMsg } from '../ui.js';
 import { openDetailSheet } from '../shot-sheet.js';
@@ -65,8 +66,9 @@ export async function matchView(root, { id }) {
   catch (e) { root.append(h('div', { class: 'page' }, h('p', { class: 'warn' }, e.code === 'not_cached' ? t('err.not_cached') : errMsg(e)), h('a', { class: 'btn', href: '#/' }, t('back')))); return; }
   setLive(data);
   const m = data.match;
-  const teamPlayers = playersOf(m.team_id);
-  const goalkeepers = teamPlayers.filter((p) => p.is_goalkeeper);
+  let teamPlayers = squadOf(m); // solo los convocados (o toda la plantilla si no se ha marcado a nadie)
+  let goalkeepers = teamPlayers.filter((p) => p.is_goalkeeper);
+  const refreshSquad = () => { teamPlayers = squadOf(m); goalkeepers = teamPlayers.filter((p) => p.is_goalkeeper); };
   const rival = m.rival || rivalName(m.rival_id);
   let mode = lsGet('urd.mode', 'simple');
   let part = Number(lsGet(`urd.part.${id}`, '0')) || null;
@@ -78,6 +80,9 @@ export async function matchView(root, { id }) {
 
   const screen = h('div', { class: 'page match' });
   root.append(screen);
+  const release = keepAwake(); // la pantalla no se apaga mientras se anota
+  const onHash = () => { if (location.hash !== `#/match/${id}`) { release(); window.removeEventListener('hashchange', onHash); } };
+  window.addEventListener('hashchange', onHash);
 
   const events = () => data.events;
   const counters = () => totalCounters(events(), data.adjustments);
@@ -91,7 +96,7 @@ export async function matchView(root, { id }) {
     last = { type, at: Date.now() };
     addEventOp(id, type, extra, part);
     vibrate();
-    toast(t('noted', { what: t(`ev.${type}`) }));
+    toast(t('noted', { what: t(`ev.${type}`) }), 'ok', { label: t('undo.short'), run: undo });
     render();
   }
 
@@ -123,7 +128,7 @@ export async function matchView(root, { id }) {
       }
     }
     addEventOp(id, d.type, fields, part);
-    vibrate(); toast(t('noted', { what: d.subtype ? t(`sub.${d.subtype}`) : t(`ev.${d.type}`) })); render();
+    vibrate(); toast(t('noted', { what: d.subtype ? t(`sub.${d.subtype}`) : t(`ev.${d.type}`) }), 'ok', { label: t('undo.short'), run: undo }); render();
   }
 
   // d = botón; kind = 'player' | 'keeper'
@@ -143,6 +148,38 @@ export async function matchView(root, { id }) {
     if (d.grid && goalDetail) {
       openDetailSheet({ quick: true, type: d.type, zone: d.zone, title: t(d.label), onSave: (f) => commitEvent(d, base, f) });
     } else commitEvent(d, base);
+  }
+
+  // Convocados: quién juega hoy (los chips de anotación solo muestran a esos)
+  function editSquad() {
+    const all = playersOf(m.team_id);
+    const cur = new Set((Array.isArray(m.squad) && m.squad.length ? m.squad : all.map((p) => p.id)));
+    const list = h('div', { class: 'squad-list' });
+    const count = h('p', { class: 'muted small' });
+    const draw = () => {
+      list.replaceChildren(all.map((p) => h('label', { class: 'check squad-row' },
+        h('input', { type: 'checkbox', checked: cur.has(p.id), onchange: (e) => { if (e.target.checked) cur.add(p.id); else cur.delete(p.id); draw(); } }),
+        h('b', null, p.number ?? '·'), ' ', `${p.name}${p.surname ? ' ' + p.surname : ''}`, p.is_goalkeeper ? ' 🧤' : '')));
+      count.textContent = t('squad.count', { n: cur.size, total: all.length });
+    };
+    draw();
+    const s = sheet({
+      title: t('squad.title'),
+      body: [h('p', { class: 'muted' }, t('squad.hint')), count,
+        h('div', { class: 'btn-row' },
+          h('button', { class: 'btn', type: 'button', onclick: () => { all.forEach((p) => cur.add(p.id)); draw(); } }, t('squad.all')),
+          h('button', { class: 'btn', type: 'button', onclick: () => { cur.clear(); draw(); } }, t('squad.none'))),
+        list,
+        h('div', { class: 'btn-row sticky-save' }, h('button', { class: 'btn primary big', type: 'button', onclick: () => {
+          const ids = all.filter((p) => cur.has(p.id)).map((p) => p.id);
+          const squad = ids.length && ids.length < all.length ? ids : null; // todos o ninguno = toda la plantilla
+          enqueue({ op: 'match.update', id, fields: { squad } });
+          m.squad = squad; refreshSquad();
+          if (selPlayer && selPlayer !== NONE && !teamPlayers.some((p) => p.id === selPlayer)) selPlayer = null;
+          if (selKeeper && !goalkeepers.some((p) => p.id === selKeeper)) selKeeper = goalkeepers.length === 1 ? goalkeepers[0].id : null;
+          s.close(); toast(t('saved')); render();
+        } }, t('save')))],
+    });
   }
 
   function completePending(ev) {
@@ -216,7 +253,8 @@ export async function matchView(root, { id }) {
         noneLabel ? h('button', { type: 'button', class: `chip${cur === NONE ? ' on' : ''}`, 'aria-pressed': cur === NONE ? 'true' : 'false', onclick: () => { set(NONE); lsSet(key, NONE); render(); } }, noneLabel) : null);
       return [
         h('div', { class: 'adv-toggle' }, h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: goalDetail, onchange: (e) => { goalDetail = e.target.checked; lsSet('urd.gd', goalDetail ? '1' : '0'); } }), ' ', t('adv.detail_goal'))),
-        h('h2', { class: 'grp' }, t('adv.player')),
+        h('div', { class: 'grp-row' }, h('h2', { class: 'grp' }, t('adv.player')),
+          h('button', { type: 'button', class: 'btn small', onclick: editSquad }, `${t('squad.btn')} (${teamPlayers.length})`)),
         chipsFor(teamPlayers, selPlayer, (v) => { selPlayer = v; }, `urd.pl.${id}`, t('shot.no_player')),
         h('h2', { class: 'grp' }, t('adv.shots')), h('div', { class: 'acts' }, SHOT_BTNS.map((d) => ab(d, 'player'))),
         h('h2', { class: 'grp' }, t('adv.losses')), h('div', { class: 'acts' }, LOSS_BTNS.map((d) => ab(d, 'player'))),

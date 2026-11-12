@@ -3,6 +3,7 @@ import { h, clear, toast } from './dom.js';
 import { t, getLang, onLangChange } from './i18n.js';
 import { state, api, loadBootstrap, subscribe, onUnauthorized, onSyncError, forgetLocal, flush } from './store.js';
 import { errMsg } from './ui.js';
+import { applyPrefs } from './prefs.js';
 import { matchView } from './views/match.js';
 import { summaryView } from './views/summary.js';
 import { homeView, newMatchView } from './views/home.js';
@@ -31,16 +32,22 @@ function buildShell() {
   const nav = h('nav', { class: 'tabbar', 'aria-label': 'Menu' },
     [['#/', t('nav.matches'), '▦', ''], ['#/players', t('nav.players'), '☺', 'players'], ['#/reports', t('nav.reports'), '▤', 'reports'], ['#/more', t('nav.more'), '☰', 'more']]
       .map(([href, label, icon, key]) => h('a', { href, 'data-key': key }, h('span', { class: 'ti', 'aria-hidden': 'true' }, icon), h('span', null, label))));
+  const dot = h('span', { class: 'sync-dot', role: 'img' });
   const header = h('header', { class: 'topbar' },
     h('a', { href: '#/', class: 'brand' }, h('img', { src: '/icons/logo.png', alt: '', width: 28, height: 36 }), h('span', null, 'Urdaibai E.T.')),
-    langToggle(() => route()));
+    h('div', { class: 'top-right' }, dot, langToggle(() => route())));
   clear(app).append(status, header, main, nav);
-  shell = { status, main, nav, header };
+  shell = { status, main, nav, header, dot };
 }
 
 function updateStatus() {
   if (!shell) return;
   const s = shell.status;
+  const d = shell.dot; // indicador de guardado: ✓ todo enviado · ⟳ pendiente · ⚠ sin conexión
+  const mode = !state.online ? 'off' : state.pending ? 'sync' : 'ok';
+  d.className = `sync-dot ${mode}`;
+  d.textContent = mode === 'ok' ? '✓' : mode === 'sync' ? '⟳' : '⚠';
+  d.setAttribute('aria-label', mode === 'ok' ? t('sync.ok') : mode === 'sync' ? t('status.pending', { n: state.pending }) : t('status.offline'));
   if (!state.online) { s.hidden = false; s.className = 'status off'; s.textContent = `${t('status.offline')}${state.pending ? ` · ${t('status.pending', { n: state.pending })}` : ''}`; }
   else if (state.pending) { s.hidden = false; s.className = 'status sync'; s.textContent = t('status.pending', { n: state.pending }); }
   else s.hidden = true;
@@ -61,7 +68,7 @@ export async function route() {
   try {
     switch (key) {
       case 'home': homeView(shell.main); break;
-      case 'new': newMatchView(shell.main, { practice: params.practice === '1' }); break;
+      case 'new': newMatchView(shell.main, { practice: params.practice === '1', from: params.from }); break;
       case 'match': await matchView(shell.main, { id: a }); break;
       case 'summary': await summaryView(shell.main, { id: a }); break;
       case 'players': playersView(shell.main, params); break;
@@ -112,6 +119,7 @@ subscribe(updateStatus);
 window.addEventListener('hashchange', () => { if (state.user) route(); });
 onLangChange(() => { document.documentElement.lang = getLang(); if (state.user) { buildShell(); updateStatus(); route(); } });
 document.documentElement.lang = getLang();
+applyPrefs();
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 

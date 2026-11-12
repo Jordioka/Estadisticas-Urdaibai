@@ -2,7 +2,7 @@
 import { h, toast, fmtDate } from '../dom.js';
 import { t } from '../i18n.js';
 import { state, api, loadBootstrap } from '../store.js';
-import { segmented, field, backBar, errMsg } from '../ui.js';
+import { segmented, field, backBar, errMsg, dropZone } from '../ui.js';
 import { readFileRows, downloadXlsx, downloadCsv } from '../files.js';
 import { playersTemplate, simpleTemplate, advancedTemplate } from '../templates.js';
 import { currentTeamId } from './home.js';
@@ -109,8 +109,9 @@ export function importView(root, params = {}) {
       state.teams.length > 1 ? field(t('imp.default_team'),
         h('select', { onchange: (e) => { S.defaultTeam = e.target.value; if (S.rows) call(true); } },
           h('option', { value: '' }, t('imp.default_none')), ...teamNames().map((n) => h('option', { value: n, selected: n === S.defaultTeam }, n))), t('imp.default_team_hint')) : null,
-      h('label', { class: 'file-pick' }, h('span', { class: 'btn primary big' }, S.fileName ? `📄 ${S.fileName}` : t('imp.choose')),
-        h('input', { type: 'file', accept: '.csv,.xlsx,.xls,.txt', class: 'sr-only', onchange: (e) => onFile(e.target.files[0]) })),
+      dropZone(h('label', { class: 'file-pick' }, h('span', { class: 'btn primary big' }, S.fileName ? `📄 ${S.fileName}` : t('imp.choose')),
+        h('span', { class: 'muted small drop-hint' }, t('imp.drop')),
+        h('input', { type: 'file', accept: '.csv,.xlsx,.xls,.txt', class: 'sr-only', onchange: (e) => onFile(e.target.files[0]) })), onFile),
       S.busy ? h('p', { class: 'muted center' }, t('loading')) : null,
       S.error ? h('p', { class: 'warn', role: 'alert' }, S.error) : null,
       S.done ? h('div', { class: 'ok-box' }, '✓ ', t('imp.done'), S.done.created != null ? ` — ${t('imp.created', { n: S.done.created })}` : '') : null,

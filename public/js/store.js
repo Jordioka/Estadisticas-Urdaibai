@@ -1,12 +1,12 @@
 // Estado de la aplicación, caché local y cola de sincronización sin conexión.
 // Cada toque se guarda como operación con identificador único: si se reenvía, el servidor la ignora (sin duplicados).
-import { totalCounters, emptyCounters } from './stats.js';
+import { totalCounters, emptyCounters, squadPlayers } from './stats.js';
 
 const K = { cache: 'urd.cache.v2', outbox: 'urd.outbox.v2', match: (id) => `urd.match.v2.${id}` };
 
 export const state = {
   ready: false, user: null, teams: [], rivals: [], players: [], matches: [], seasons: [], thresholds: null,
-  online: true, pending: 0,
+  online: true, pending: 0, last_backup: null,
 };
 
 const listeners = new Set();
@@ -48,12 +48,12 @@ export async function api(method, path, body) {
 function applyBootstrap(d) {
   Object.assign(state, {
     user: d.user, teams: d.teams, rivals: d.rivals, players: d.players, matches: d.matches, seasons: d.seasons,
-    thresholds: d.thresholds, ready: true,
+    thresholds: d.thresholds, last_backup: d.last_backup ?? null, ready: true,
   });
 }
 const persistState = () => lsSet(K.cache, {
   user: state.user, teams: state.teams, rivals: state.rivals, players: state.players, matches: state.matches,
-  seasons: state.seasons, thresholds: state.thresholds,
+  seasons: state.seasons, thresholds: state.thresholds, last_backup: state.last_backup,
 });
 
 export async function loadBootstrap() {
@@ -112,7 +112,7 @@ function applyLocal(op) {
       if (!state.rivals.some((r) => r.id === op.id)) { state.rivals.push({ id: op.id, name: op.name }); sortRivals(); }
       persistState(); return;
     case 'match.create': {
-      const m = { id: op.id, team_id: op.team_id, rival_id: op.rival_id, date: op.date, home_away: op.home_away || 'home', is_practice: op.is_practice ? 1 : 0 };
+      const m = { id: op.id, team_id: op.team_id, rival_id: op.rival_id, date: op.date, home_away: op.home_away || 'home', is_practice: op.is_practice ? 1 : 0, squad: Array.isArray(op.squad) && op.squad.length ? op.squad : null };
       if (!state.matches.some((x) => x.id === op.id)) state.matches.unshift({ ...m, counters: emptyCounters() });
       state.matches.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
       lsSet(K.match(op.id), { match: { ...m, rival: state.rivals.find((r) => r.id === op.rival_id)?.name, team: state.teams.find((t) => t.id === op.team_id)?.name }, events: [], adjustments: [] });
@@ -121,6 +121,7 @@ function applyLocal(op) {
     case 'match.update': {
       const m = state.matches.find((x) => x.id === op.id);
       if (m) Object.assign(m, op.fields);
+      if (m && 'squad' in op.fields && !(op.fields.squad && op.fields.squad.length)) m.squad = null;
       const d = matchData(op.id);
       if (d) { Object.assign(d.match, op.fields); if (op.fields.rival_id) d.match.rival = state.rivals.find((r) => r.id === op.fields.rival_id)?.name; lsSet(K.match(op.id), d); }
       state.matches.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
@@ -214,4 +215,7 @@ setInterval(() => { if (outbox.length) flush().catch(() => {}); }, 8000);
 export const teamName = (id) => state.teams.find((t) => t.id === id)?.name || '';
 export const rivalName = (id) => state.rivals.find((r) => r.id === id)?.name || '';
 export const playersOf = (teamId) => state.players.filter((p) => p.team_id === teamId);
+// Jugadores convocados a un partido (si no se ha marcado a nadie, toda la plantilla)
+export const squadOf = (match) => squadPlayers(playersOf(match.team_id), match.squad);
+export const setLastBackup = (v) => { state.last_backup = v; persistState(); emit(); };
 export const playerLabel = (p) => (p ? `${p.number != null ? '#' + p.number + ' ' : ''}${p.name}${p.surname ? ' ' + p.surname : ''}` : '');

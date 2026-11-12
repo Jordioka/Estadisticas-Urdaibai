@@ -278,3 +278,10 @@ export function unassignedGoalkeepers(total, rows) {
   const saves = left('saves'), goals_against = left('goals_against');
   return { player_id: null, saves, goals_against, save_pct: ratio(saves, saves + goals_against) };
 }
+
+// Jugadores convocados: si no se ha marcado a nadie (o ya no existen), toda la plantilla
+export function squadPlayers(all, squad) {
+  if (!Array.isArray(squad) || !squad.length) return all;
+  const set = new Set(squad), picked = all.filter((p) => set.has(p.id));
+  return picked.length ? picked : all;
+}

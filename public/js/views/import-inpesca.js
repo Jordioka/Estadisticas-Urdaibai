@@ -4,7 +4,7 @@
 import { h, toast, fmtDate, today, confirmDialog } from '../dom.js';
 import { t } from '../i18n.js';
 import { state, api, loadBootstrap, playersOf } from '../store.js';
-import { field, errMsg } from '../ui.js';
+import { field, errMsg, dropZone } from '../ui.js';
 import { loadXLSX } from '../files.js';
 import { normName } from '../names.js';
 import { parseInpescaWorkbook, inpescaRows, inpescaPlayerRows } from '../inpesca.js';
@@ -156,8 +156,9 @@ export function inpescaPanel() {
     box.replaceChildren(
       state.teams.length > 1 ? field(t('inp.team'), h('select', { onchange: async (e) => { S.teamId = e.target.value; if (S.sheets) await checkAll(); else render(); } },
         state.teams.map((x) => h('option', { value: x.id, selected: x.id === S.teamId }, x.name)))) : h('p', { class: 'muted' }, `${t('inp.team')}: `, h('strong', null, team()?.name || '')),
-      h('label', { class: 'file-pick' }, h('span', { class: 'btn primary big' }, S.fileName ? `📄 ${S.fileName}` : t('inp.choose')),
-        h('input', { type: 'file', accept: '.xlsx,.xls', class: 'sr-only', onchange: (e) => onFile(e.target.files[0]) })),
+      dropZone(h('label', { class: 'file-pick' }, h('span', { class: 'btn primary big' }, S.fileName ? `📄 ${S.fileName}` : t('inp.choose')),
+        h('span', { class: 'muted small drop-hint' }, t('imp.drop')),
+        h('input', { type: 'file', accept: '.xlsx,.xls', class: 'sr-only', onchange: (e) => onFile(e.target.files[0]) })), onFile),
       S.busy ? h('p', { class: 'muted center' }, t('loading')) : null,
       S.error ? h('p', { class: 'warn', role: 'alert' }, S.error) : null,
       S.done ? h('div', { class: 'ok-box' }, h('strong', null, '✓ ', t('imp.done')),

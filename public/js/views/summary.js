@@ -1,7 +1,7 @@
 // Resumen y corrección del partido: totales, porcentajes con color, eventos editables, jugadores, porteros y mapas.
 import { h, toast, sheet, confirmDialog, fmtDate, fmtPct, today, clear } from '../dom.js';
 import { t } from '../i18n.js';
-import { state, getMatch, setLive, enqueue, playersOf, rivalName, playerLabel } from '../store.js';
+import { state, getMatch, setLive, enqueue, playersOf, rivalName, playerLabel, teamName } from '../store.js';
 import {
   totalCounters, percentages, gradeAll, isPending, playerStats, goalkeeperStats, zoneStats, cellStats, unassignedPlayers, unassignedGoalkeepers,
   EVENT_TYPES, SHOT_TYPES_ALL, ZONES, ratio, SUBTYPES, OWN_SHOT_TYPES,
@@ -9,6 +9,7 @@ import {
 import { countersGrid, percentBlock, warningsBox, pill, segmented, field, backBar, errMsg } from '../ui.js';
 import { openDetailSheet, openPlayerPick } from '../shot-sheet.js';
 import { playersTable, keepersTable, mapsBlock } from './tables.js';
+import { shareMatch, topScorers } from '../share.js';
 
 const hhmm = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
@@ -129,7 +130,12 @@ export async function summaryView(root, { id }) {
       backBar(`${m.home_away === 'away' ? '@ ' : ''}${rival} · ${fmtDate(m.date)} · ${m.home_away === 'away' ? t('away') : t('home')}`, () => (location.hash = '#/'), h('button', { class: 'btn small', type: 'button', onclick: editMatch }, t('edit'))),
       h('div', { class: 'row-actions' },
         h('a', { class: 'btn primary', href: `#/match/${id}` }, t('go_annotate')),
-        h('button', { class: 'btn', type: 'button', onclick: () => window.print() }, t('export.pdf'))),
+        h('button', { class: 'btn', type: 'button', onclick: async () => {
+          const r = await shareMatch({ team: m.team || teamName(m.team_id), rival, date: m.date, away: m.home_away === 'away', c, top: topScorers(ev, nameOf) });
+          if (r === 'downloaded') toast(t('share.saved'));
+        } }, '↗ ', t('share')),
+        h('button', { class: 'btn', type: 'button', onclick: () => window.print() }, t('export.pdf')),
+        h('a', { class: 'btn', href: `#/new?from=${id}` }, t('match.duplicate'))),
       h('div', { class: 'score big-score' }, h('b', null, c.goals), ' – ', h('b', null, c.goals_against), h('span', { class: 'muted small' }, ` ${t('score.legend')}`)),
       countersGrid(c, { adjusted }),
       data.adjustments.length ? h('p', { class: 'muted small' }, '* ', t('adj.legend')) : null,

@@ -2,6 +2,13 @@
 import { validateEvent, isIsoDate, COUNTERS } from '../public/js/stats.js';
 import { HttpError, nowIso, canTeam, ensureSeason, audit, requireMatchWrite, cleanStr, validId } from './core.js';
 
+// Convocados: lista de ids de jugadores (o null = toda la plantilla)
+function squadJson(v) {
+  if (!Array.isArray(v)) return null;
+  const ids = [...new Set(v.filter((x) => typeof x === 'string' && x.length > 0 && x.length <= 80))].slice(0, 60);
+  return ids.length ? JSON.stringify(ids) : null;
+}
+
 export const EVENT_FIELDS = ['part', 'minute', 'player_id', 'goalkeeper_id', 'zone', 'goal_cell', 'result', 'shot_type', 'trajectory', 'pressure', 'phase', 'subtype'];
 const INT_FIELDS = ['part', 'minute', 'goal_cell'];
 
@@ -62,8 +69,8 @@ const OPS = {
     }
     const now = nowIso();
     await ctx.db.run(
-      'INSERT INTO matches (id, team_id, rival_id, date, home_away, season_id, is_practice, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
-      op.id, op.team_id, op.rival_id, op.date, op.home_away === 'away' ? 'away' : 'home', seasonId, op.is_practice ? 1 : 0, ctx.user.id, now, now
+      'INSERT INTO matches (id, team_id, rival_id, date, home_away, season_id, is_practice, squad, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+      op.id, op.team_id, op.rival_id, op.date, op.home_away === 'away' ? 'away' : 'home', seasonId, op.is_practice ? 1 : 0, squadJson(op.squad), ctx.user.id, now, now
     );
     await audit(ctx, 'match.create', 'match', op.id, { team_id: op.team_id, date: op.date, practice: !!op.is_practice });
   },
@@ -83,8 +90,9 @@ const OPS = {
     }
     if (f.home_away) next.home_away = f.home_away === 'away' ? 'away' : 'home';
     const seasonId = await ensureSeason(ctx.db, next.date);
-    await ctx.db.run('UPDATE matches SET rival_id=?, date=?, home_away=?, season_id=?, updated_at=? WHERE id=?',
-      next.rival_id, next.date, next.home_away, seasonId, nowIso(), m.id);
+    const squad = 'squad' in f ? squadJson(f.squad) : m.squad;
+    await ctx.db.run('UPDATE matches SET rival_id=?, date=?, home_away=?, season_id=?, squad=?, updated_at=? WHERE id=?',
+      next.rival_id, next.date, next.home_away, seasonId, squad, nowIso(), m.id);
     await audit(ctx, 'match.update', 'match', m.id, f);
   },
 

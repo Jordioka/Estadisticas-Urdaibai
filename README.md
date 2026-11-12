@@ -119,3 +119,12 @@ Si lo haces al revés, la web puede dar error hasta que se aplique la migración
 - **Copia de seguridad**: `npx wrangler d1 export urdaibai-stats --remote --output copia.sql`. Los informes también se pueden exportar a Excel.
 - **Si cambias archivos de `public/`** y la app instalada no muestra los cambios, sube el número de `VERSION` en `public/sw.js`.
 - Cambiar la contraseña de un usuario: *Administración → Usuarios → (usuario) → Nueva contraseña*.
+
+
+## Mejoras de uso (v13)
+- **Migración nueva `0004_squad.sql`** (convocados por partido). Aplicar antes de subir el código: `npx wrangler d1 migrations apply urdaibai-stats --remote`.
+- Anotación: aviso con botón «Deshacer», pantalla siempre encendida, convocados por partido, marcador fijo arriba.
+- Partidos: «Repetir partido» (rival, local/visitante y convocados) y «Compartir» (imagen + texto para WhatsApp).
+- Informes: comparar dos jugadores y «Forma» (últimos 5 partidos frente a la temporada).
+- Más: ajustes del móvil (vibración, pantalla encendida, botones grandes, modo zurdo, tema claro/oscuro), copia de seguridad con fecha y aviso a los 30 días (solo administración), acceso a la papelera.
+- Indicador de guardado (✓ ⟳ ⚠) junto al idioma; arrastrar archivos en las importaciones.

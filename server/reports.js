@@ -37,6 +37,7 @@ export async function loadMatchDetail(ctx, id) {
   if (!(await canTeam(ctx, m.team_id))) throw new HttpError(403, 'forbidden_team');
   const events = await eventsFor(ctx.db, [id]);
   const adjustments = await ctx.db.all('SELECT stat, delta FROM adjustments WHERE match_id = ?', id);
+  try { const a = JSON.parse(m.squad); m.squad = Array.isArray(a) ? a : null; } catch { m.squad = null; }
   return { match: m, events, adjustments };
 }
 

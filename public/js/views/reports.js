@@ -57,6 +57,7 @@ export function reportsView(root) {
   if (!state.seasons.some((s) => s.id === S.season)) S.season = defaultSeason();
   let report = null, busy = false, error = '';
   let playerSel = lsGet('urd.rep.player', '');
+  let cmpMode = false, cmp = []; // comparar dos jugadores
   let q = ''; // búsqueda de rival (partidos) o de jugador/a (pestaña Jugadores)
   let bodyBox = null;
   const hasQ = () => normName(q) !== '';
@@ -131,9 +132,13 @@ export function reportsView(root) {
     if (!info.some((p) => p.id === playerSel)) playerSel = '';
     const vis = info.filter((p) => !hasQ() || normName(`${p.number ?? ''} ${p.name} ${p.surname || ''}`).includes(normName(q)) || p.id === playerSel);
     const pick = h('div', { class: 'chips people no-print' },
-      h('button', { type: 'button', class: `chip${playerSel === '' ? ' on' : ''}`, onclick: () => { playerSel = ''; lsSet('urd.rep.player', ''); render(); } }, t('rep.all_players')),
-      vis.map((p) => h('button', { type: 'button', class: `chip${playerSel === p.id ? ' on' : ''}`, onclick: () => { playerSel = p.id; lsSet('urd.rep.player', p.id); render(); } }, h('b', null, p.number ?? '·'), ' ', `${p.name}${p.surname ? ' ' + p.surname : ''}`)),
+      h('button', { type: 'button', class: `chip${!cmpMode && playerSel === '' ? ' on' : ''}`, onclick: () => { cmpMode = false; playerSel = ''; lsSet('urd.rep.player', ''); render(); } }, t('rep.all_players')),
+      h('button', { type: 'button', class: `chip wide${cmpMode ? ' on' : ''}`, onclick: () => { cmpMode = !cmpMode; cmp = []; render(); } }, `⇄ ${t('cmp.btn')}`),
+      vis.map((p) => (cmpMode
+        ? h('button', { type: 'button', class: `chip${cmp.includes(p.id) ? ' on' : ''}`, 'aria-pressed': cmp.includes(p.id) ? 'true' : 'false', onclick: () => { cmp = cmp.includes(p.id) ? cmp.filter((x) => x !== p.id) : [...cmp.slice(-1), p.id]; render(); } }, h('b', null, p.number ?? '·'), ' ', `${p.name}${p.surname ? ' ' + p.surname : ''}`)
+        : h('button', { type: 'button', class: `chip${playerSel === p.id ? ' on' : ''}`, onclick: () => { playerSel = p.id; lsSet('urd.rep.player', p.id); render(); } }, h('b', null, p.number ?? '·'), ' ', `${p.name}${p.surname ? ' ' + p.surname : ''}`))),
       !vis.length ? h('span', { class: 'muted' }, t('search.none')) : null);
+    if (cmpMode) return [pick, compareTable()];
     if (!playerSel) return [pick, playersTable(report.players, nameOf), keepersTable(report.goalkeepers, nameOf)];
     const label = (m) => `${m.rival} ${fmtDate(m.date).slice(0, 5)}`;
     const mById = new Map(report.matches.map((m) => [m.id, m]));
@@ -151,6 +156,43 @@ export function reportsView(root) {
     return [pick,
       playersTable({ rows: rowsP, caption: `${nameOf(playerSel)} · ${t('tbl.players')}` }, name),
       keepersTable({ rows: rowsK, caption: `${nameOf(playerSel)} · ${t('tbl.keepers')}` }, name)];
+  }
+
+  // Comparar dos jugadores/as lado a lado (lo mejor de cada fila, en negrita)
+  function compareTable() {
+    const A = cmp.map((id) => ({ id, p: report.players.rows.find((r) => r.player_id === id) || {}, k: report.goalkeepers.rows.find((r) => r.player_id === id) }));
+    if (A.length < 2) return h('p', { class: 'muted center' }, t('cmp.pick'));
+    const pct = (a, b) => (b > 0 ? a / b : null);
+    const rows = [
+      [t('stat.goals'), (x) => x.p.goals || 0, true], [t('col.shots'), (x) => x.p.shots || 0, true],
+      [t('pct.shot_eff.short'), (x) => pct(x.p.goals || 0, x.p.shots || 0), true, true],
+      [t('col.losses'), (x) => x.p.losses || 0, false], [t('sub.robo'), (x) => x.p.steals || 0, true], [t('sub.chapa'), (x) => x.p.blocks || 0, true],
+      [t('sub.dos_min'), (x) => x.p.two_min || 0, false], [t('col.poss'), (x) => x.p.possessions || 0, true],
+    ];
+    if (A.some((x) => x.k)) rows.push([t('stat.saves'), (x) => x.k?.saves || 0, true], [t('stat.goals_against'), (x) => x.k?.goals_against || 0, false], [t('pct.save_pct.short'), (x) => (x.k && x.k.saves + x.k.goals_against > 0 ? x.k.save_pct : null), true, true]);
+    const fmt = (v, isPct) => (v == null ? '–' : isPct ? fmtPct(v) : v);
+    return h('div', { class: 'table-wrap' }, h('table', { class: 'tbl cmp' },
+      h('thead', null, h('tr', null, h('th', null, ''), A.map((x) => h('th', null, nameOf(x.id))))),
+      h('tbody', null, rows.map(([label, get, high, isPct]) => {
+        const v = A.map(get), ok = v[0] != null && v[1] != null && v[0] !== v[1];
+        const best = ok ? (high ? (v[0] > v[1] ? 0 : 1) : (v[0] < v[1] ? 0 : 1)) : -1;
+        return h('tr', null, h('th', { scope: 'row' }, label), v.map((val, i) => h('td', { class: `cnum${best === i ? ' best' : ''}` }, fmt(val, isPct))));
+      }))));
+  }
+
+  // «Forma»: últimos 5 partidos frente al total de la temporada
+  function formBlock() {
+    const ms = report.matches;
+    if (ms.length < 4) return null;
+    const last = ms.slice(-5), lastC = sumCounters(last.map((m) => m.counters)), all = percentages(report.totals), now = percentages(lastC);
+    const defs = [['off_eff', true], ['shot_eff', true], ['loss_pct', false], ['save_pct', true]];
+    return h('div', { class: 'bw' }, h('h2', null, t('rep.form', { n: last.length })),
+      defs.map(([k, high]) => {
+        const d = now[k] - all[k], good = Math.abs(d) < 0.005 ? null : (d > 0) === high;
+        return h('div', { class: 'bw-row' }, h('strong', null, t(`pct.${k}`)),
+          h('span', null, fmtPct(now[k]), ' ', h('span', { class: good == null ? 'muted' : good ? 'trend up' : 'trend down' }, good == null ? '＝' : d > 0 ? '▲' : '▼', ` ${d > 0 ? '+' : ''}${(d * 100).toFixed(1)}`)),
+          h('span', { class: 'muted small' }, `${t('rep.season_avg')}: ${fmtPct(all[k])}`));
+      }));
   }
 
   function bestWorst() {
@@ -180,7 +222,7 @@ export function reportsView(root) {
       const c = report.totals, n = report.matches.length;
       return n ? [
         h('div', { class: 'score big-score' }, t('rep.matches_n', { n }), h('span', { class: 'muted small' }, ` · ${t('rep.avg_poss', { n: (c.possessions / n).toFixed(1) })}`)),
-        countersGrid(c), warningsBox(c), percentBlock(c, state.thresholds), bestWorst(),
+        countersGrid(c), warningsBox(c), percentBlock(c, state.thresholds), formBlock(), bestWorst(),
         playersTable(report.players, nameOf), keepersTable(report.goalkeepers, nameOf),
         h('h2', null, t('maps.title')), mapsBlock(report.zones, report.cells, true),
       ] : h('p', { class: 'muted center' }, t('rep.none'));
