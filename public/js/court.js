@@ -59,6 +59,8 @@ export function courtSVG(opts = {}) {
   };
   for (const s of SECTORS) g.append(...mkZone(s.z, sectorPath(s), '', s.at));
   for (const m of MID) g.append(...mkZone(m.z, sectorPath({ r1: 0, r2: 18, a1: m.a1, a2: m.a2 }), '', m.at, true));
+  const ovBack = svg('g', { 'pointer-events': 'none' }); // resalte de sectores: debajo del área de 6 m para no pintarla
+  g.append(ovBack);
   g.append(svg('path', { d: AREA6, class: 'area6', 'pointer-events': 'none' })); // área de 6 m: no se pulsa
   root.append(g);
   // líneas de 6 m (continua) y 9 m (discontinua)
@@ -81,9 +83,9 @@ export function courtSVG(opts = {}) {
 
   const wrap = h('div', { class: 'court-wrap' }, root);
   const update = ({ selected, counts, heat, eff, pick } = {}) => {
-    ov.replaceChildren();
+    ov.replaceChildren(); ovBack.replaceChildren();
     for (const [z, { p, sub }] of Object.entries(zones)) {
-      if (pick === z) { const c = p.cloneNode(); c.removeAttribute('data-zone'); c.removeAttribute('role'); c.removeAttribute('tabindex'); c.removeAttribute('style'); c.setAttribute('class', 'zone-ov'); c.style.cssText = 'fill:#FFC000;fill-opacity:.8;stroke:#fff;stroke-width:.5;paint-order:stroke;filter:drop-shadow(0 0 .35px #000)'; ov.append(c); }
+      if (pick === z) { const c = p.cloneNode(); c.removeAttribute('data-zone'); c.removeAttribute('role'); c.removeAttribute('tabindex'); c.removeAttribute('style'); c.setAttribute('class', 'zone-ov'); c.style.cssText = 'fill:#FFC000;fill-opacity:.8;stroke:#fff;stroke-width:.5;paint-order:stroke;filter:drop-shadow(0 0 .35px #000)'; (z === '7M' ? ov : ovBack).append(c); }
       p.classList.toggle('selected', selected === z);
       p.setAttribute('aria-pressed', selected === z || pick === z ? 'true' : 'false');
       p.classList.toggle('pick', pick === z);
