@@ -303,7 +303,8 @@ a.player-card { cursor: pointer; }
 .gk-cell[data-eff="mid"], .zone[data-eff="mid"] { background: #8A7F86; fill: #8A7F86; color: #fff; border-color: #8A7F86; }
 .gk-cell[data-eff="bad"], .zone[data-eff="bad"] { background: #C14A5C; fill: #C14A5C; color: #fff; border-color: #C14A5C; }
 .gk-court .zone-count { font-size: 1.2px; fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.35); stroke-width: .12px; }
-.gk-cell.pick, .zone.pick { outline: 4px solid var(--ink); outline-offset: -4px; stroke: var(--ink); stroke-width: .35; }
+.gk-cell.pick { outline: 4px solid var(--ink); outline-offset: -4px; }
+.zone.pick { outline: none; stroke: #1A1D21; stroke-width: .3; stroke-dasharray: none; filter: brightness(.9); }
 .gk-cell.pick { box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px var(--ink); }
 .gk-eff { text-align: center; margin: 8px 0 4px; font-size: 1.05rem; }
 .gk-steps { text-align: center; font-weight: 700; margin: 10px 0 6px; min-height: 1.6em; }
