@@ -140,3 +140,8 @@ Si lo haces al revés, la web puede dar error hasta que se aplique la migración
 - Pestaña **Portería**: ahora se anota *desde dónde* tiran (campo, zona; 7M = penalti) y *hacia dónde* (cuadrado 1-9), o solo la zona («Anotar sin cuadrado»).
 - **Importar → Portería (zona × cuadrado)**: Excel con una hoja por partido y portero, con cuadrículas PARADAS y GOLES (filas = zona, columnas = cuadrado). El partido debe existir. Nunca suma a los totales: completa paradas/goles sin portero y guarda el resto como detalle; si hay más de lo que dicen los totales, pregunta si se omite (recomendado) o se añade también al total.
 - Requiere las migraciones 0004 y 0005 (`npx wrangler d1 migrations apply urdaibai-stats --remote`) antes de desplegar.
+
+## v16 — Portería: mapa enlazado
+- Pestaña Portería rehecha: 1) cuadrado, 2) zona (los dos obligatorios), 3) aparecen los botones Parada / Gol. 7M = penalti automático.
+- Cuadrícula y campo muestran en vivo «paradas/lanzamientos» con color (verde ≥35 %, rojo <20 %). Al elegir una zona los cuadrados enseñan solo lo de esa zona, y al revés.
+- Botón «🧤 Mapa de portería» en las otras pestañas del partido: vista rápida con filtro por portero o «Todos».

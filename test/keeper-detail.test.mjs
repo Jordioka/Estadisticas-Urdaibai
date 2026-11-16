@@ -108,3 +108,17 @@ test('Plantilla en cuadrícula: zona × cuadrado quedan asociados al convertir a
   assert.deepEqual(rows.map((r) => [r.Tipo, r.Zona, r['Punto portería'], r.Cantidad]), [['Parada', '7M', 1, 1], ['Parada', '9C', 5, 2], ['Gol', 'EI', 9, 1]]);
   assert.equal(rows[0].Equipo, 'Urdaibai'); assert.equal(rows[0].Portero, 1); assert.equal(rows[0].Rival, 'Rival de ejemplo');
 });
+
+test('Mapa enlazado: al elegir zona los cuadrados filtran, y al elegir cuadrado las zonas filtran', async () => {
+  const { keeperAgg, effClass } = await import('../public/js/stats.js');
+  const e = (type, zone, goal_cell, extra = {}) => ({ type, zone, goal_cell, deleted_at: null, goalkeeper_id: 'k', ...extra });
+  const evs = [e('save', '9C', 5), e('save', '9C', 5), e('goal_against', '9C', 5), e('goal_against', 'EI', 1), e('save', '6C', 5, { detail_only: 1 }), e('save', '9C', 5, { goalkeeper_id: 'otro' })];
+  const mine = (x) => x.goalkeeper_id === 'k';
+  const all = keeperAgg(evs, mine);
+  assert.deepEqual(all.cells[5], { s: 3, g: 1 }); assert.deepEqual(all.tot, { s: 3, g: 2 });
+  const z = keeperAgg(evs, mine, { zone: '9C' });
+  assert.deepEqual(z.cells[5], { s: 2, g: 1 }); assert.deepEqual(z.cells[1], { s: 0, g: 0 });
+  const c = keeperAgg(evs, mine, { cell: 5 });
+  assert.deepEqual(c.zones['6C'], { s: 1, g: 0 }); assert.deepEqual(c.zones.EI, { s: 0, g: 0 });
+  assert.equal(effClass({ s: 3, g: 1 }), 'good'); assert.equal(effClass({ s: 0, g: 2 }), 'bad'); assert.equal(effClass({ s: 0, g: 0 }), '');
+});

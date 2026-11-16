@@ -295,3 +295,23 @@ a.player-card { cursor: pointer; }
 .toast.has-action { width: max-content; max-width: calc(100vw - 32px); border-radius: 18px; white-space: normal; text-align: left; }
 
 .gk-court { max-width: 420px; margin: 4px auto 8px; } .gk-court .court { width: 100%; height: auto; } .gk-nocell { display: block; margin: 8px auto 0; }
+
+/* mapa de portería enlazado (cuadrado ↔ zona) */
+.gk-map { max-width: 440px; margin: 0 auto; }
+.gk-cell { font-variant-numeric: tabular-nums; position: relative; }
+.gk-cell[data-eff="good"], .zone[data-eff="good"] { background: #4DBDA8; fill: #4DBDA8; color: #fff; border-color: #4DBDA8; }
+.gk-cell[data-eff="mid"], .zone[data-eff="mid"] { background: #8A7F86; fill: #8A7F86; color: #fff; border-color: #8A7F86; }
+.gk-cell[data-eff="bad"], .zone[data-eff="bad"] { background: #C14A5C; fill: #C14A5C; color: #fff; border-color: #C14A5C; }
+.gk-court .zone-count { font-size: 1.2px; fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.35); stroke-width: .12px; }
+.gk-cell.pick, .zone.pick { outline: 4px solid var(--ink); outline-offset: -4px; stroke: var(--ink); stroke-width: .35; }
+.gk-cell.pick { box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px var(--ink); }
+.gk-eff { text-align: center; margin: 8px 0 4px; font-size: 1.05rem; }
+.gk-steps { text-align: center; font-weight: 700; margin: 10px 0 6px; min-height: 1.6em; }
+.gk-steps .ok { color: var(--strong); }
+.gk-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0; }
+.gk-actions .act { min-height: 84px; }
+.gk-actions .act.a-goal_against { border-color: #E8140C; }
+.gk-mapbtn { display: block; margin: 0 auto 8px; }
+.gk-dock { position: sticky; bottom: 70px; z-index: 5; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 6px 10px; margin: 8px 0; box-shadow: 0 -4px 14px rgba(0,0,0,.08); }
+.gk-dock .gk-steps { margin: 4px 0; } .gk-dock .gk-actions { margin: 4px 0 6px; }
+.gk-map .gk-cell { min-height: 68px; } .gk-map .gk-goal { gap: 5px; padding: 8px; }

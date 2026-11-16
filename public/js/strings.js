@@ -223,6 +223,11 @@ export const D = {
   'tbl.players_detail': ['Jugadores · detalle', 'Jokalariak · xehetasuna'],
   'ps.matches': ['Partidos', 'Partidak'], 'ps.by_match': ['Partido a partido', 'Partidaz partida'],
   // --- importar hoja INPESCA
+  'gk.step1': ['1 · Toca el cuadrado de la portería', '1 · Ukitu atearen laukia'],
+  'gk.step2': ['Cuadrado {cell} ✓ · 2 · Ahora toca la zona de lanzamiento', '{cell}. laukia ✓ · 2 · Orain ukitu jaurtiketa eremua'],
+  'gk.ready': ['Cuadrado {cell} · {zone} ✓ — ¿qué ha pasado?', '{cell}. laukia · {zone} ✓ — Zer gertatu da?'],
+  'gk.eff': ['Eficacia del portero', 'Atezainaren eraginkortasuna'], 'gk.all': ['Todos', 'Denak'], 'gk.map': ['Mapa de portería', 'Atearen mapa'], 'gk.clear': ['Borrar selección', 'Hautapena ezabatu'],
+  'gk.map_hint': ['Toca una zona para ver por qué cuadrados entran, o un cuadrado para ver desde qué zonas.', 'Ukitu eremu bat zein laukitatik sartzen diren ikusteko, edo lauki bat zein eremutatik ikusteko.'],
   'imp.kind.keeper': ['Portería (zona × cuadrado)', 'Atea (eremua × laukia)'],
   'imp.help.keeper': ['Una hoja por partido y portero: cuadrícula de PARADAS y de GOLES (filas = desde dónde tiran, columnas = cuadrado 1-9). No cambia los totales del partido, que debe existir ya.', 'Partidu eta atezaina bakoitzeko orri bat: GELDIKETAK eta GOLAK koadrikulan (errenkadak = nondik jaurti, zutabeak = 1-9 laukia). Ez ditu partiduaren guztiak aldatzen; partiduak lehendik egon behar du.'],
   'imp.keeper.safe': ['Los totales del partido no cambian: se completan paradas/goles sin portero y el resto se guarda como detalle. Se muestra «cabe/subido».', 'Partiduaren guztiak ez dira aldatzen: atezainik gabeko geldiketak/golak osatzen dira eta gainerakoa xehetasun gisa gordetzen da. «sartzen da/igota» erakusten da.'],

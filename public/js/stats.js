@@ -303,3 +303,25 @@ export function keeperCoverage(events, adjustments, type) {
   const hasBase = adjustments.some((a) => a.stat === STAT_OF[type] && a.delta !== 0); // el partido trae totales de otra fuente (Excel simple…)
   return { total, detail, normal, pending, withCell, hasBase, free: total - (normal - pending) - detail };
 }
+
+// ----- Mapa de portería enlazado (cuadrado ↔ zona) -----
+const KT = ['save', 'goal_against'];
+const sg = () => ({ s: 0, g: 0 });
+export const effClass = (x) => { const n = x.s + x.g; if (!n) return ''; const p = x.s / n; return p >= 0.35 ? 'good' : p < 0.2 ? 'bad' : 'mid'; };
+
+// mine(e): ¿cuenta este evento? (portero elegido o todos)
+export function keeperAgg(events, mine, { cell = null, zone = null } = {}) {
+  const cells = {}, zones = {}, tot = sg();
+  for (const c of GOAL_CELLS) cells[c] = sg();
+  for (const z of ZONES) zones[z] = sg();
+  for (const e of events) {
+    if (e.deleted_at || !KT.includes(e.type) || !mine(e)) continue;
+    const k = e.type === 'save' ? 's' : 'g';
+    const c = e.goal_cell ? Number(e.goal_cell) : null;
+    if (c && cells[c] && (!zone || e.zone === zone)) cells[c][k]++;
+    if (e.zone && zones[e.zone] && (!cell || c === cell)) zones[e.zone][k]++;
+    if ((!cell || c === cell) && (!zone || e.zone === zone)) tot[k]++;
+  }
+  return { cells, zones, tot };
+}
+

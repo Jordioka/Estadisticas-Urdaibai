@@ -79,10 +79,12 @@ export function courtSVG(opts = {}) {
   root.append(seven, sevenSub, texts);
 
   const wrap = h('div', { class: 'court-wrap' }, root);
-  const update = ({ selected, counts, heat } = {}) => {
+  const update = ({ selected, counts, heat, eff, pick } = {}) => {
     for (const [z, { p, sub }] of Object.entries(zones)) {
       p.classList.toggle('selected', selected === z);
-      p.setAttribute('aria-pressed', selected === z ? 'true' : 'false');
+      p.setAttribute('aria-pressed', selected === z || pick === z ? 'true' : 'false');
+      p.classList.toggle('pick', pick === z);
+      if (eff) p.setAttribute('data-eff', eff[z] || ''); else p.removeAttribute('data-eff');
       sub.textContent = counts && counts[z] != null && counts[z] !== '' ? counts[z] : '';
       const v = heat?.[z] ?? 0;
       p.style.fillOpacity = heat ? String(0.12 + 0.75 * v) : '';
