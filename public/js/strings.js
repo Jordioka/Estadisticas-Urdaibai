@@ -282,4 +282,17 @@ export const D = {
   'backup.banner': ['Hace {n} días que no haces copia de seguridad.', '{n} egun daramatzazu segurtasun kopiarik egin gabe.'], 'backup.banner_never': ['Aún no has hecho ninguna copia de seguridad.', 'Oraindik ez duzu segurtasun kopiarik egin.'],
   'sync.ok': ['Todo guardado', 'Dena gordeta'],
   'imp.drop': ['o arrastra aquí el archivo', 'edo arrastratu fitxategia hona'],
+  // --- pestaña Portería
+  'mode.keeper': ['Portería', 'Atea'],
+  'gk.hint': ['Toca el cuadrado por donde entró o se paró el balón. Si el partido ya traía totales, el detalle no se suma otra vez.', 'Ukitu baloia sartu edo gelditu den laukia. Partidak totalak bazituen, xehetasuna ez da berriz batzen.'],
+  'gk.pen': ['Penalti 7 m', '7 metroko penaltia'], 'gk.remove': ['Quitar', 'Kendu'],
+  'gk.nothing': ['No hay nada que quitar en ese cuadrado', 'Ez dago ezer kentzeko lauki horretan'], 'gk.removed': ['Quitado', 'Kenduta'],
+  'gk.detail_saved': ['Detalle guardado (ya estaba en el total)', 'Xehetasuna gordeta (totalean bazegoen)'],
+  'gk.over': ['Ya has repartido todo el total de «{what}» del partido ({detail} de {total}). ¿Quieres sumar una más al total?', 'Partidako «{what}» totala osorik banatu duzu ({detail}/{total}). Totalari bat gehiago gehitu nahi diozu?'],
+  'gk.over.add': ['Sí, sumar al total', 'Bai, totalari gehitu'], 'gk.over.all': ['Sí, y no preguntar más en este partido', 'Bai, eta ez galdetu gehiago partida honetan'],
+  'gk.over.hint': ['Úsalo si en los datos generales faltan datos y la hoja de porteros tiene más.', 'Erabili datu orokorretan datuak falta badira eta atezainen orriak gehiago baditu.'],
+  'gk.cover': ['{what}: {n} con cuadrado de {total}', '{what}: {n} lauki batekin ({total})'],
+  'gk.tag': ['solo detalle (ya contado)', 'xehetasuna soilik (kontatuta)'],
+  'gk.others': ['Otras acciones del portero', 'Atezainaren beste ekintzak'],
+  'gk.pending_hint': ['Las anotadas en la vista simple se completan al tocar un cuadrado (no se duplican).', 'Ikuspegi sinplean idatzitakoak lauki bat ukitzean osatzen dira (ez dira bikoizten).'],
 };

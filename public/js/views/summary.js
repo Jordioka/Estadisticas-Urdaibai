@@ -55,6 +55,7 @@ export async function summaryView(root, { id }) {
     if (ev.zone) bits.push(t(`zone.${ev.zone}`));
     if (ev.goal_cell) bits.push(`${t('goal.cell')} ${ev.goal_cell}`);
     if (ev.result) bits.push(t(`result.${ev.result}`));
+    if (ev.detail_only) bits.push(t('gk.tag'));
     return bits.join(' · ');
   }
 

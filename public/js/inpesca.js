@@ -22,8 +22,8 @@ const titleCase = (s) => s.toLowerCase().replace(/(^|[\s.])(\S)/g, (m, a, b) => 
 const pad = (n) => String(n).padStart(2, '0');
 
 // Fecha de la hoja → 'AAAA-MM-DD' (o null si no se entiende)
-export function sheetDate(ws, SSF) {
-  const c = cell(ws, 'F6');
+export function sheetDate(ws, SSF, addr = 'F6') {
+  const c = cell(ws, addr);
   if (!c) return null;
   if (typeof c.v === 'number' && SSF) {
     const d = SSF.parse_date_code(c.v);
@@ -41,13 +41,33 @@ export function sheetDate(ws, SSF) {
 const PLAYER_COLS = { gol: 'E', cgol: 'G', fuera: 'I', parada: 'K', cfallo: 'M', pases: 'O', pisando: 'Q', fataque: 'S', pasos: 'U', robos: 'W', chapas: 'Y', dos: 'AA' };
 const GK_COLS = { paradas: 'E', goles: 'G', fuera: 'I', cp_ok: 'K', cp_fallo: 'M', pen_par: 'O', pen_gol: 'Q', pen_fuera: 'S' };
 
-function readPeople(ws, r1, r2, cols) {
+// Valor que hay a la derecha de un rótulo («Fecha», «Adversario:», «Visitante:»…) en las primeras filas.
+// Así se leen también las plantillas con las columnas desplazadas.
+function afterLabel(ws, re, maxGap = 6) {
+  for (let r = 1; r <= 8; r++) for (let c = 0; c < 30; c++) {
+    if (!re.test(text(ws, letter(c) + r))) continue;
+    for (let k = 1; k <= maxGap; k++) { const a = letter(c + k) + r; if (text(ws, a) && !/:\s*$/.test(text(ws, a))) return a; }
+  }
+  return null;
+}
+
+// Filas de jugadores y de porteros: se buscan por el rótulo «NOMBRE DEL JUGADOR/A» (hay plantillas con más filas);
+// si no se encuentra, las posiciones clásicas (10-22 y 26-28)
+function sectionRows(ws) {
+  const heads = []; let sh = 0;
+  for (let r = 1; r <= 80; r++) for (const L of ['B', 'C']) if (/^NOMBRE DEL/i.test(text(ws, `${L}${r}`))) { heads.push(r); sh = colIdx(L) - 2; }
+  if (heads.length < 2) return { players: [10, 22], keepers: [26, 28], sh: 0 };
+  return { players: [heads[0] + 2, heads[1] - 2], keepers: [heads[1] + 2, heads[1] + 8], sh };
+}
+
+function readPeople(ws, r1, r2, cols, sh = 0) {
   const out = [];
+  const at = (L) => letter(colIdx(L) + sh);
   for (let r = r1; r <= r2; r++) {
-    const num0 = parseInt(text(ws, `C${r}`), 10), name = text(ws, `D${r}`);
-    if (!Number.isInteger(num0) || !name) continue;
+    const num0 = parseInt(text(ws, `${at('C')}${r}`), 10), name = text(ws, `${at('D')}${r}`);
+    if (!Number.isInteger(num0) || num0 <= 0 || !name || name === '0') continue; // filas vacías con fórmula (0)
     const row = { num: num0, name };
-    for (const [k, L] of Object.entries(cols)) row[k] = pair(ws, L, r);
+    for (const [k, L] of Object.entries(cols)) row[k] = pair(ws, at(L), r);
     out.push(row);
   }
   return out;
@@ -55,11 +75,14 @@ function readPeople(ws, r1, r2, cols) {
 
 // Una hoja → partido (o null si no es una hoja de partido)
 export function parseInpescaSheet(ws, sheetName, SSF) {
-  const rival = text(ws, 'K6');
+  const sec = sectionRows(ws);
+  const rivalAddr = sec.sh ? afterLabel(ws, /^Adversari/i) : 'K6';
+  const rival = rivalAddr ? text(ws, rivalAddr) : '';
   if (!rival) return null;
-  const players = readPeople(ws, 10, 22, PLAYER_COLS);
-  const keepers = readPeople(ws, 26, 28, GK_COLS);
-  const m = { sheet: sheetName, date: sheetDate(ws, SSF), rival: titleCase(rival), kind: text(ws, 'Q6'), away: !!text(ws, 'AA6'), players, keepers };
+  const players = readPeople(ws, ...sec.players, PLAYER_COLS, sec.sh);
+  const keepers = readPeople(ws, ...sec.keepers, GK_COLS, sec.sh);
+  const dateAddr = sec.sh ? afterLabel(ws, /^Fecha/i) : 'F6', awayAddr = sec.sh ? afterLabel(ws, /^Visitante/i, 3) : 'AA6';
+  const m = { sheet: sheetName, date: sheetDate(ws, SSF, dateAddr || 'F6'), rival: titleCase(rival), kind: sec.sh ? (afterLabel(ws, /^Partido/i, 3) ? text(ws, afterLabel(ws, /^Partido/i, 3)) : '') : text(ws, 'Q6'), away: !!(awayAddr && text(ws, awayAddr)), players, keepers };
   m.people = [...new Map([...players, ...keepers].map((p) => [p.num, p])).values()].map((p) => {
     const parts = p.name.split(' ');
     return { num: p.num, name: titleCase(parts[0]), surname: titleCase(parts.slice(1).join(' ')), gk: keepers.some((k) => k.num === p.num) };

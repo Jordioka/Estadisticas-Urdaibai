@@ -128,3 +128,10 @@ Si lo haces al revés, la web puede dar error hasta que se aplique la migración
 - Informes: comparar dos jugadores y «Forma» (últimos 5 partidos frente a la temporada).
 - Más: ajustes del móvil (vibración, pantalla encendida, botones grandes, modo zurdo, tema claro/oscuro), copia de seguridad con fecha y aviso a los 30 días (solo administración), acceso a la papelera.
 - Indicador de guardado (✓ ⟳ ⚠) junto al idioma; arrastrar archivos en las importaciones.
+
+
+## Pestaña Portería (v14)
+- **Migración nueva `0005_detail_only.sql`**. Aplicar antes de subir el código: `npx wrangler d1 migrations apply urdaibai-stats --remote`.
+- La pantalla de anotar tiene tres pestañas: **Simple · Más detalle · Portería**. En Portería se elige portero y se toca el cuadrado de la portería (3×3) para cada parada o gol en contra (con opción de penalti 7 m y de quitar).
+- Si el partido ya tenía totales (Excel simple, vista simple), el detalle **no se suma otra vez**: se guarda como «solo detalle». Las paradas/goles anotados en la vista simple sin portero se completan en vez de duplicarse.
+- Si el detalle supera los totales del partido, pregunta si se quiere sumar la diferencia al total.

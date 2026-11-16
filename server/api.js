@@ -94,7 +94,7 @@ async function bootstrap(ctx) {
     for (const m of matches) m.squad = parseSquad(m.squad);
     const counts = await db.all(
       `SELECT e.match_id, e.type, COUNT(*) AS n FROM events e JOIN matches m ON m.id = e.match_id
-       WHERE e.deleted_at IS NULL AND m.deleted_at IS NULL AND m.team_id IN (${ph}) GROUP BY e.match_id, e.type`, ...teamIds);
+       WHERE e.deleted_at IS NULL AND e.detail_only = 0 AND m.deleted_at IS NULL AND m.team_id IN (${ph}) GROUP BY e.match_id, e.type`, ...teamIds);
     const adj = await db.all(
       `SELECT a.match_id, a.stat, a.delta FROM adjustments a JOIN matches m ON m.id = a.match_id
        WHERE m.deleted_at IS NULL AND m.team_id IN (${ph})`, ...teamIds);

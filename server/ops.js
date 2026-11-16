@@ -9,8 +9,8 @@ function squadJson(v) {
   return ids.length ? JSON.stringify(ids) : null;
 }
 
-export const EVENT_FIELDS = ['part', 'minute', 'player_id', 'goalkeeper_id', 'zone', 'goal_cell', 'result', 'shot_type', 'trajectory', 'pressure', 'phase', 'subtype'];
-const INT_FIELDS = ['part', 'minute', 'goal_cell'];
+export const EVENT_FIELDS = ['part', 'minute', 'player_id', 'goalkeeper_id', 'zone', 'goal_cell', 'result', 'shot_type', 'trajectory', 'pressure', 'phase', 'subtype', 'detail_only'];
+const INT_FIELDS = ['part', 'minute', 'goal_cell', 'detail_only'];
 
 function normEventFields(src) {
   const out = {};
@@ -107,6 +107,7 @@ const OPS = {
     if (!validId(op.id)) throw new HttpError(400, 'invalid_id');
     const m = await requireMatchWrite(ctx, op.match_id);
     const e = fullEvent(op.type, normEventFields(op));
+    e.detail_only = e.detail_only ? 1 : 0;
     const err = validateEvent(e);
     if (err) throw new HttpError(400, 'invalid_event', { field: err });
     await checkPeople(ctx, m, e);
@@ -118,9 +119,9 @@ const OPS = {
     const ts = clientTs(op.ts);
     await ctx.db.run(
       `INSERT INTO events (id, match_id, type, part, minute, player_id, goalkeeper_id, zone, goal_cell, result,
-        shot_type, trajectory, pressure, phase, subtype, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        shot_type, trajectory, pressure, phase, subtype, detail_only, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       op.id, m.id, e.type, e.part, e.minute, e.player_id, e.goalkeeper_id, e.zone, e.goal_cell, e.result,
-      e.shot_type, e.trajectory, e.pressure, e.phase, e.subtype, ctx.user.id, ts, ts
+      e.shot_type, e.trajectory, e.pressure, e.phase, e.subtype, e.detail_only, ctx.user.id, ts, ts
     );
   },
 
@@ -131,14 +132,15 @@ const OPS = {
     const patch = normEventFields(op.fields || {});
     const type = op.fields?.type || ev.type;
     const merged = fullEvent(type, { ...ev, ...patch });
+    merged.detail_only = merged.detail_only && ['save', 'goal_against'].includes(merged.type) ? 1 : 0; // al cambiar de tipo deja de ser «solo detalle»
     const err = validateEvent(merged);
     if (err) throw new HttpError(400, 'invalid_event', { field: err });
     await checkPeople(ctx, m, merged);
     await ctx.db.run(
       `UPDATE events SET type=?, part=?, minute=?, player_id=?, goalkeeper_id=?, zone=?, goal_cell=?, result=?,
-        shot_type=?, trajectory=?, pressure=?, phase=?, subtype=?, updated_at=? WHERE id=?`,
+        shot_type=?, trajectory=?, pressure=?, phase=?, subtype=?, detail_only=?, updated_at=? WHERE id=?`,
       merged.type, merged.part, merged.minute, merged.player_id, merged.goalkeeper_id, merged.zone, merged.goal_cell, merged.result,
-      merged.shot_type, merged.trajectory, merged.pressure, merged.phase, merged.subtype, nowIso(), ev.id
+      merged.shot_type, merged.trajectory, merged.pressure, merged.phase, merged.subtype, merged.detail_only, nowIso(), ev.id
     );
     await audit(ctx, 'event.update', 'event', ev.id, { match_id: ev.match_id, from: ev.type, to: merged.type });
   },

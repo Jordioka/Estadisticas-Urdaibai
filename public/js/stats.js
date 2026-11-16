@@ -58,7 +58,7 @@ export const emptyCounters = () => Object.fromEntries(COUNTERS.map((k) => [k, 0]
 export function eventsToCounters(events) {
   const c = emptyCounters();
   for (const e of events) {
-    if (e.deleted_at) continue;
+    if (e.deleted_at || e.detail_only) continue; // «solo detalle»: guarda el cuadrado y el portero, pero ya está contado en los totales
     const add = CONTRIB[e.type];
     if (!add) continue;
     for (const k in add) c[k] += add[k];
@@ -164,6 +164,7 @@ export function validateEvent(e) {
     const toGoal = ['goal', 'goal_against', 'save'].includes(e.type) || (e.type === 'shot_miss' && e.result === 'save');
     if (!toGoal) return 'goal_cell';
   }
+  if (e.detail_only && !['save', 'goal_against'].includes(e.type)) return 'detail_only';
   if (e.player_id && !['possession', 'loss', 'goal', 'shot_miss', 'recovery', 'sanction'].includes(e.type)) return 'player';
   if (e.goalkeeper_id && !['goal_against', 'save', 'shot_against_miss', 'counter_pass'].includes(e.type)) return 'goalkeeper';
   if (e.subtype != null && e.subtype !== '') {
@@ -284,4 +285,21 @@ export function squadPlayers(all, squad) {
   if (!Array.isArray(squad) || !squad.length) return all;
   const set = new Set(squad), picked = all.filter((p) => set.has(p.id));
   return picked.length ? picked : all;
+}
+
+// ---------- Detalle de portería frente a los totales del partido ----------
+// «Solo detalle» (detail_only): paradas/goles con portero y cuadrado que NO suman a los totales (ya estaban contados en los datos simples).
+export const KEEPER_TYPES = ['save', 'goal_against'];
+const STAT_OF = { save: 'saves', goal_against: 'goals_against' };
+
+// Estado de una paradas/goles: total del partido, cuántos tienen detalle y cuánto queda por repartir
+export function keeperCoverage(events, adjustments, type) {
+  const total = totalCounters(events, adjustments)[STAT_OF[type]];
+  const live = events.filter((e) => !e.deleted_at && e.type === type);
+  const detail = live.filter((e) => e.detail_only).length; // solo detalle
+  const normal = live.length - detail; // eventos que ya suman al total
+  const pending = live.filter(isPending).length; // sin portero: se pueden completar sin tocar el total
+  const withCell = live.filter((e) => e.goal_cell).length;
+  const hasBase = adjustments.some((a) => a.stat === STAT_OF[type] && a.delta !== 0); // el partido trae totales de otra fuente (Excel simple…)
+  return { total, detail, normal, pending, withCell, hasBase, free: total - (normal - pending) - detail };
 }

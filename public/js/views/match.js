@@ -3,7 +3,7 @@ import { h, toast, vibrate, uid, fmtDate, sheet, confirmDialog, choiceDialog } f
 import { t } from '../i18n.js';
 import { state, getMatch, setLive, enqueue, rivalName, playersOf, squadOf, flush } from '../store.js';
 import { keepAwake } from '../prefs.js';
-import { totalCounters, eventsToCounters, isPending, SHOT_TYPES_ALL, LOSS_KINDS, REC_KINDS } from '../stats.js';
+import { totalCounters, eventsToCounters, isPending, keeperCoverage, GOAL_CELLS, SHOT_TYPES_ALL, LOSS_KINDS, REC_KINDS } from '../stats.js';
 import { countersGrid, warningsBox, segmented, errMsg } from '../ui.js';
 import { openDetailSheet } from '../shot-sheet.js';
 
@@ -77,6 +77,7 @@ export async function matchView(root, { id }) {
   let selPlayer = valid(lsGet(`urd.pl.${id}`, null), teamPlayers);
   let selKeeper = valid(lsGet(`urd.gk.${id}`, null), goalkeepers) || (goalkeepers.length === 1 ? goalkeepers[0].id : null);
   let goalDetail = lsGet('urd.gd', '1') === '1'; // pedir el punto de la portería al anotar
+  let gkMode = 'save', gkPen = false, gkRemove = false, gkAddAll = false; // pestaña Portería
 
   const screen = h('div', { class: 'page match' });
   root.append(screen);
@@ -182,6 +183,40 @@ export async function matchView(root, { id }) {
     });
   }
 
+  // Pestaña Portería: un toque en un cuadrado = una parada o un gol en ese punto.
+  // Si el partido ya tenía esos totales (Excel simple…) el detalle NO se suma otra vez; si te pasas, pregunta antes de sumarlo.
+  async function cellTap(cell) {
+    const type = gkMode;
+    if (goalkeepers.length && selKeeper == null) { toast(t('adv.pick_keeper')); return; }
+    const gid = selKeeper && selKeeper !== NONE ? selKeeper : null;
+    if (gkRemove) {
+      const ev = [...events()].reverse().find((e) => e.type === type && Number(e.goal_cell) === cell && (e.goalkeeper_id || null) === gid && (e.phase === 'penalti') === gkPen);
+      if (!ev) { toast(t('gk.nothing')); return; }
+      enqueue({ op: 'event.delete', id: ev.id, match_id: id });
+      vibrate(); toast(t('gk.removed')); render(); return;
+    }
+    const fields = { goalkeeper_id: gid, goal_cell: cell, ...(gkPen ? { phase: 'penalti', zone: '7M' } : {}) };
+    const cov = keeperCoverage(events(), data.adjustments, type);
+    const done = (msg) => { vibrate(); toast(msg, 'ok', { label: t('undo.short'), run: undo }); render(); };
+    if (cov.pending > 0) { // ya estaba anotada en la vista simple: se completa, no se duplica
+      const pend = events().find((e) => isPending(e) && e.type === type);
+      enqueue({ op: 'event.update', id: pend.id, match_id: id, fields });
+      return done(t('completed'));
+    }
+    if (cov.free > 0) { // ya está en los totales del partido: solo se guarda el detalle
+      addEventOp(id, type, { ...fields, detail_only: 1 }, part);
+      return done(t('gk.detail_saved'));
+    }
+    if (cov.hasBase && !gkAddAll) { // te pasas de los totales del partido
+      const choice = await choiceDialog(t('gk.over', { what: t(`ev.${type}`).toLowerCase(), detail: cov.detail, total: cov.total }),
+        [{ value: 'add', label: t('gk.over.add'), primary: true }, { value: 'all', label: t('gk.over.all') }], { detail: t('gk.over.hint') });
+      if (!choice) return;
+      if (choice === 'all') gkAddAll = true;
+    }
+    addEventOp(id, type, fields, part);
+    done(t('noted', { what: t(`ev.${type}`) }));
+  }
+
   function completePending(ev) {
     openDetailSheet({
       event: ev, title: t(`ev.${ev.type}`), people: teamPlayers, keepers: goalkeepers,
@@ -227,30 +262,61 @@ export async function matchView(root, { id }) {
     const btn = (type, hintKey, onclick, cls = '') => h('button', { type: 'button', class: `act ${cls}`, onclick },
       h('span', { class: 'act-l' }, t(`act.${type}`)), h('span', { class: 'act-h' }, t(hintKey || `act.${type}.h`)));
 
-    const buttons = mode === 'simple'
+    const buildButtons = () => mode === 'simple'
       ? [
         h('h2', { class: 'grp' }, t('grp.attack')),
         h('div', { class: 'acts' }, ACTIONS.attack.map((tp) => btn(tp, null, () => tap(tp), `a-${tp}`))),
         h('h2', { class: 'grp' }, t('grp.defense')),
         h('div', { class: 'acts' }, ACTIONS.defense.map((tp) => btn(tp, null, () => tap(tp), `a-${tp}`))),
       ]
-      : advancedButtons();
+      : mode === 'keeper' ? keeperTab() : advancedButtons();
+
+    // Botones con contador y chips de jugador/portero (comunes a «Más detalle» y «Portería»)
+    const count = (d, kind) => {
+      const who = kind === 'player' ? selPlayer : selKeeper;
+      if (who == null) return 0;
+      const f = kind === 'player' ? 'player_id' : 'goalkeeper_id';
+      return events().filter((e) => matchesBtn(e, d) && (who === NONE ? !e[f] : e[f] === who)).length;
+    };
+    const ab = (d, kind) => {
+      const n = count(d, kind);
+      return h('button', { type: 'button', class: `act sm${n ? ' has' : ''}`, onclick: () => advTap(d, kind) },
+        h('span', { class: 'act-l' }, t(d.label)), h('span', { class: 'act-n', 'aria-label': String(n) }, n || ''));
+    };
+    const chipsFor = (list, cur, set, key, noneLabel) => h('div', { class: 'chips people' },
+      list.map((p) => h('button', { type: 'button', class: `chip${cur === p.id ? ' on' : ''}`, 'aria-pressed': cur === p.id ? 'true' : 'false', onclick: () => { set(p.id); lsSet(key, p.id); render(); } }, h('b', null, p.number ?? '·'), ' ', p.name, p.surname ? ' ' + p.surname : '')),
+      noneLabel ? h('button', { type: 'button', class: `chip${cur === NONE ? ' on' : ''}`, 'aria-pressed': cur === NONE ? 'true' : 'false', onclick: () => { set(NONE); lsSet(key, NONE); render(); } }, noneLabel) : null);
+
+    function keeperTab() {
+      const sel = selKeeper === NONE ? null : selKeeper;
+      const mine = (e) => (e.goalkeeper_id || null) === sel;
+      const n = (cell, type) => events().filter((e) => e.type === type && Number(e.goal_cell) === cell && mine(e)).length;
+      const cov = { save: keeperCoverage(events(), data.adjustments, 'save'), goal_against: keeperCoverage(events(), data.adjustments, 'goal_against') };
+      const covLine = (type) => { const k = cov[type]; return h('span', { class: k.withCell > k.total ? 'warn' : '' }, t('gk.cover', { what: t(`ev.${type}`), n: k.withCell, total: k.total })); };
+      const chip = (on, label, fn) => h('button', { type: 'button', class: `chip${on ? ' on' : ''}`, 'aria-pressed': on ? 'true' : 'false', onclick: fn }, label);
+      return [
+        h('h2', { class: 'grp' }, t('adv.keeper')),
+        goalkeepers.length ? chipsFor(goalkeepers, selKeeper, (v) => { selKeeper = v; }, `urd.gk.${id}`, null) : h('p', { class: 'muted small' }, t('shot.no_keepers_hint')),
+        h('p', { class: 'muted small' }, t('gk.hint')),
+        h('div', { class: 'chips gk-modes' },
+          chip(gkMode === 'save', `🧤 ${t('ev.save')}`, () => { gkMode = 'save'; render(); }),
+          chip(gkMode === 'goal_against', `⚽ ${t('ev.goal_against')}`, () => { gkMode = 'goal_against'; render(); }),
+          chip(gkPen, t('gk.pen'), () => { gkPen = !gkPen; render(); }),
+          chip(gkRemove, `− ${t('gk.remove')}`, () => { gkRemove = !gkRemove; render(); })),
+        h('div', { class: `gk-goal${gkRemove ? ' removing' : ''}${gkMode === 'goal_against' ? ' goals' : ''}`, role: 'group', 'aria-label': t('shot.goal') },
+          GOAL_CELLS.map((cell) => { const s1 = n(cell, 'save'), g1 = n(cell, 'goal_against');
+            return h('button', { type: 'button', class: 'gk-cell', 'aria-label': `${cell}: ${s1} ${t('ev.save')}, ${g1} ${t('ev.goal_against')}`, onclick: () => cellTap(cell) },
+              h('span', { class: 'gk-s' }, s1 ? `🧤${s1}` : ''), h('span', { class: 'gk-g' }, g1 ? `⚽${g1}` : '')); })),
+        h('div', { class: 'gk-cover muted small' }, covLine('save'), covLine('goal_against')),
+        h('h3', { class: 'sub' }, t('gk.others')),
+        h('div', { class: 'acts' }, [GK_BTNS[2], GK_BTNS[3], GK_BTNS[4], PEN_BTNS[2]].map((d) => ab(d, 'keeper'))),
+        pend.filter((e) => ['save', 'goal_against', 'shot_against_miss'].includes(e.type)).length ? h('div', { class: 'pending' },
+          h('h2', { class: 'grp' }, t('pending.title', { n: pend.filter((e) => ['save', 'goal_against', 'shot_against_miss'].includes(e.type)).length })),
+          h('p', { class: 'muted small' }, t('gk.pending_hint'))) : null,
+      ];
+    }
 
     function advancedButtons() {
-      const count = (d, kind) => {
-        const who = kind === 'player' ? selPlayer : selKeeper;
-        if (who == null) return 0;
-        const f = kind === 'player' ? 'player_id' : 'goalkeeper_id';
-        return events().filter((e) => matchesBtn(e, d) && (who === NONE ? !e[f] : e[f] === who)).length;
-      };
-      const ab = (d, kind) => {
-        const n = count(d, kind);
-        return h('button', { type: 'button', class: `act sm${n ? ' has' : ''}`, onclick: () => advTap(d, kind) },
-          h('span', { class: 'act-l' }, t(d.label)), h('span', { class: 'act-n', 'aria-label': String(n) }, n || ''));
-      };
-      const chipsFor = (list, cur, set, key, noneLabel) => h('div', { class: 'chips people' },
-        list.map((p) => h('button', { type: 'button', class: `chip${cur === p.id ? ' on' : ''}`, 'aria-pressed': cur === p.id ? 'true' : 'false', onclick: () => { set(p.id); lsSet(key, p.id); render(); } }, h('b', null, p.number ?? '·'), ' ', p.name, p.surname ? ' ' + p.surname : '')),
-        noneLabel ? h('button', { type: 'button', class: `chip${cur === NONE ? ' on' : ''}`, 'aria-pressed': cur === NONE ? 'true' : 'false', onclick: () => { set(NONE); lsSet(key, NONE); render(); } }, noneLabel) : null);
       return [
         h('div', { class: 'adv-toggle' }, h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: goalDetail, onchange: (e) => { goalDetail = e.target.checked; lsSet('urd.gd', goalDetail ? '1' : '0'); } }), ' ', t('adv.detail_goal'))),
         h('div', { class: 'grp-row' }, h('h2', { class: 'grp' }, t('adv.player')),
@@ -260,10 +326,6 @@ export async function matchView(root, { id }) {
         h('h2', { class: 'grp' }, t('adv.losses')), h('div', { class: 'acts' }, LOSS_BTNS.map((d) => ab(d, 'player'))),
         h('h2', { class: 'grp' }, t('adv.recoveries')), h('div', { class: 'acts' }, REC_BTNS.map((d) => ab(d, 'player'))),
         h('h2', { class: 'grp' }, t('adv.sanctions')), h('div', { class: 'acts' }, SANC_BTNS.map((d) => ab(d, 'player'))),
-        h('h2', { class: 'grp' }, t('adv.keeper')),
-        goalkeepers.length ? chipsFor(goalkeepers, selKeeper, (v) => { selKeeper = v; }, `urd.gk.${id}`, null) : h('p', { class: 'muted small' }, t('shot.no_keepers_hint')),
-        h('h3', { class: 'sub' }, t('adv.game')), h('div', { class: 'acts' }, GK_BTNS.map((d) => ab(d, 'keeper'))),
-        h('h3', { class: 'sub' }, t('adv.penalties')), h('div', { class: 'acts' }, PEN_BTNS.map((d) => ab(d, 'keeper'))),
         pend.length ? h('div', { class: 'pending' },
           h('h2', { class: 'grp' }, t('pending.title', { n: pend.length })),
           h('p', { class: 'muted small' }, t('pending.hint')),
@@ -273,6 +335,7 @@ export async function matchView(root, { id }) {
       ];
     }
 
+    const buttons = buildButtons();
     screen.replaceChildren(
       h('div', { class: 'subbar' },
         h('a', { class: 'icon-btn', href: '#/', 'aria-label': t('back') }, '←'),
@@ -282,7 +345,7 @@ export async function matchView(root, { id }) {
         segmented([{ value: 0, label: '–' }, { value: 1, label: '1ª' }, { value: 2, label: '2ª' }], part || 0, (v) => { part = v || null; lsSet(`urd.part.${id}`, String(v)); render(); }, t('part'))),
       countersGrid(c, { onTap: adjust, adjusted }),
       warningsBox(c),
-      h('div', { class: 'modebar' }, segmented([{ value: 'simple', label: t('mode.simple') }, { value: 'advanced', label: t('mode.advanced') }], mode, (v) => { mode = v; lsSet('urd.mode', v); render(); }, t('mode.label'))),
+      h('div', { class: 'modebar' }, segmented([{ value: 'simple', label: t('mode.simple') }, { value: 'advanced', label: t('mode.advanced') }, { value: 'keeper', label: t('mode.keeper') }], mode, (v) => { mode = v; lsSet('urd.mode', v); render(); }, t('mode.label'))),
       ...buttons,
       h('div', { class: 'undo-bar' },
         h('button', { class: 'btn undo', type: 'button', disabled: !lastEv, onclick: undo },
