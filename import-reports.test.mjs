@@ -218,6 +218,10 @@ test('IMPORTAR avanzada (formato Excel del club): Detalle, recuperaciones, 2´, 
   assert.deepEqual([p.goals_fast, p.loss_falta_ataque, p.blocks, p.two_min], [1, 1, 1, 1]);
   const g = rep.goalkeepers.rows[0];
   assert.deepEqual([g.cp_ok, g.pen_saves, g.out], [1, 1, 1]);
+  // datos partido a partido de cada jugador (pestaña Jugadores)
+  assert.equal(rep.by_match.length, 1);
+  assert.equal(rep.by_match[0].players[0].two_min, 1);
+  assert.equal(rep.by_match[0].keepers[0].cp_ok, 1);
   // un detalle desconocido se rechaza
   const bad = (await s.admin('POST', M, { kind: 'advanced', rows: [{ ...b, Evento: 'perdida', Jugador: 7, Detalle: 'inventado' }], dry_run: true })).data;
   assert.equal(bad.errors[0].error, 'invalid_event');

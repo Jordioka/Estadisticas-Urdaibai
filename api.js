@@ -5,7 +5,7 @@ import {
   loadAccess, canTeam, accessibleTeams, audit, requireAdmin, requireOwner, ensureSeason, validId,
 } from './core.js';
 import { applyOps } from './ops.js';
-import { importPlayers, importMatches } from './imports.js';
+import { importPlayers, importMatches, importKeeperDetail } from './imports.js';
 import { buildReport, loadMatchDetail } from './reports.js';
 
 const SESSION_DAYS = 60;
@@ -74,6 +74,8 @@ function validateThresholds(t) {
   return out;
 }
 
+export const parseSquad = (v) => { try { const a = JSON.parse(v); return Array.isArray(a) ? a : null; } catch { return null; } };
+
 // ---------- Bootstrap: todo lo que el móvil necesita para trabajar (también sin conexión) ----------
 async function bootstrap(ctx) {
   const { db, user } = ctx;
@@ -87,11 +89,12 @@ async function bootstrap(ctx) {
       `SELECT id, team_id, name, surname, number, position, is_goalkeeper FROM players
        WHERE deleted_at IS NULL AND team_id IN (${ph}) ORDER BY number, name COLLATE NOCASE`, ...teamIds);
     matches = await db.all(
-      `SELECT id, team_id, rival_id, date, home_away, season_id, is_practice FROM matches
+      `SELECT id, team_id, rival_id, date, home_away, season_id, is_practice, squad FROM matches
        WHERE deleted_at IS NULL AND team_id IN (${ph}) ORDER BY date DESC, created_at DESC`, ...teamIds);
+    for (const m of matches) m.squad = parseSquad(m.squad);
     const counts = await db.all(
       `SELECT e.match_id, e.type, COUNT(*) AS n FROM events e JOIN matches m ON m.id = e.match_id
-       WHERE e.deleted_at IS NULL AND m.deleted_at IS NULL AND m.team_id IN (${ph}) GROUP BY e.match_id, e.type`, ...teamIds);
+       WHERE e.deleted_at IS NULL AND e.detail_only = 0 AND m.deleted_at IS NULL AND m.team_id IN (${ph}) GROUP BY e.match_id, e.type`, ...teamIds);
     const adj = await db.all(
       `SELECT a.match_id, a.stat, a.delta FROM adjustments a JOIN matches m ON m.id = a.match_id
        WHERE m.deleted_at IS NULL AND m.team_id IN (${ph})`, ...teamIds);
@@ -107,6 +110,7 @@ async function bootstrap(ctx) {
   return {
     user: { id: user.id, username: user.username, name: user.name, role: user.role, all_teams: !!user.all_teams, is_owner: !!user.is_owner },
     teams, rivals, players, matches, seasons, thresholds: await getThresholds(db), server_time: nowIso(),
+    last_backup: user.role === 'admin' ? (await db.first("SELECT value FROM settings WHERE key = 'last_backup'"))?.value || null : undefined,
   };
 }
 
@@ -158,6 +162,7 @@ route('GET', '/api/reports', async (ctx) => json(await buildReport(ctx, Object.f
 
 route('POST', '/api/import/players', async (ctx) => json(await importPlayers(ctx, ctx.body)));
 route('POST', '/api/import/matches', async (ctx) => json(await importMatches(ctx, ctx.body)));
+route('POST', '/api/import/keeper-detail', async (ctx) => json(await importKeeperDetail(ctx, ctx.body)));
 
 // ----- Administración -----
 const userOut = async (db, u) => ({
@@ -384,3 +389,18 @@ async function handleInner(request, env, setUsage) {
     return json({ error: 'server_error' }, 500);
   }
 }
+
+// ----- Copia de seguridad (solo administración): descarga todos los datos y anota la fecha -----
+route('GET', '/api/backup', async (ctx) => {
+  const t = async (sql) => ctx.db.all(sql);
+  const now = nowIso();
+  const dump = {
+    app: 'urdaibai-stats', version: 1, created_at: now,
+    teams: await t('SELECT * FROM teams'), players: await t('SELECT * FROM players'), seasons: await t('SELECT * FROM seasons'),
+    matches: await t('SELECT * FROM matches'), events: await t('SELECT * FROM events'), adjustments: await t('SELECT * FROM adjustments'),
+    settings: await t("SELECT key, value FROM settings WHERE key <> 'last_backup'"),
+  };
+  await ctx.db.run("INSERT INTO settings (key, value) VALUES ('last_backup', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", now);
+  await audit(ctx, 'backup', 'settings', 'last_backup', { events: dump.events.length, matches: dump.matches.length });
+  return json(dump);
+}, { admin: true });

@@ -2,7 +2,8 @@
 import { h, svg, fmtDate, fmtPct, today, toast } from '../dom.js';
 import { t } from '../i18n.js';
 import { state, api, playerLabel, teamName } from '../store.js';
-import { segmented, field, percentBlock, countersGrid, warningsBox, pill, gradeClass, errMsg } from '../ui.js';
+import { segmented, field, percentBlock, countersGrid, warningsBox, pill, gradeClass, errMsg, searchBox } from '../ui.js';
+import { normName } from '../names.js';
 import { COUNTERS, percentages, gradeAll, sumCounters } from '../stats.js';
 import { currentTeamId, teamSelect } from './home.js';
 import { playersTable, keepersTable, mapsBlock } from './tables.js';
@@ -21,7 +22,7 @@ function defaultSeason() {
 }
 
 function lineChart(matches, thresholds) {
-  const W = 340, H = 190, L = 36, R = 12, T = 12, B = 30;
+  const W = 340, H = 220, L = 36, R = 12, T = 12, B = 60;
   const series = [
     { key: 'off_eff', color: '#1B6B4F', dash: '', label: t('pct.off_eff') },
     { key: 'loss_pct', color: '#9A5B00', dash: '5 3', label: t('pct.loss_pct') },
@@ -34,7 +35,12 @@ function lineChart(matches, thresholds) {
   for (const g of [0, 0.25, 0.5, 0.75, 1]) {
     root.append(svg('line', { x1: L, x2: W - R, y1: y(g), y2: y(g), class: 'grid' }), svg('text', { x: L - 5, y: y(g) + 3, class: 'axis', 'text-anchor': 'end' }, `${g * 100}`));
   }
-  matches.forEach((m, i) => { if (n <= 12 || i % Math.ceil(n / 12) === 0) root.append(svg('text', { x: x(i), y: H - 12, class: 'axis', 'text-anchor': 'middle' }, fmtDate(m.date).slice(0, 5))); });
+  matches.forEach((m, i) => {
+    if (n <= 12 || i % Math.ceil(n / 12) === 0) {
+      const name = m.rival.length > 11 ? `${m.rival.slice(0, 10)}…` : m.rival; // nombre del rival (no la fecha)
+      root.append(svg('text', { x: x(i), y: H - B + 12, class: 'axis', 'text-anchor': 'end', transform: `rotate(-35 ${x(i)} ${H - B + 12})` }, name));
+    }
+  });
   for (const s of series) {
     const pts = matches.map((m, i) => [x(i), y(percentages(m.counters)[s.key])]);
     root.append(svg('polyline', { points: pts.map((p) => p.join(',')).join(' '), fill: 'none', stroke: s.color, 'stroke-width': 2.2, 'stroke-dasharray': s.dash }));
@@ -50,6 +56,15 @@ export function reportsView(root) {
   const S = Object.assign({ tab: 'matches', season: defaultSeason(), rival: '', from: '', to: '', ha: '' }, lsGet('urd.rep', {}));
   if (!state.seasons.some((s) => s.id === S.season)) S.season = defaultSeason();
   let report = null, busy = false, error = '';
+  let playerSel = lsGet('urd.rep.player', '');
+  let cmpMode = false, cmp = []; // comparar dos jugadores
+  let q = ''; // búsqueda de rival (partidos) o de jugador/a (pestaña Jugadores)
+  let bodyBox = null;
+  const hasQ = () => normName(q) !== '';
+  const rivalOk = (m) => !hasQ() || normName(m.rival).includes(normName(q));
+  const haText = (m) => (m.home_away === 'away' ? t('away') : t('home'));
+  // partidos visibles tras buscar rival; los totales se recalculan sobre ellos
+  const shownMatches = () => report.matches.filter(rivalOk);
 
   async function load() {
     busy = true; error = ''; render();
@@ -93,20 +108,91 @@ export function reportsView(root) {
   }
 
   // ---- tablas ----
-  function matchesTable() {
-    if (!report.matches.length) return h('p', { class: 'muted center' }, t('rep.none'));
+  function matchesTable(ms, totals) {
+    if (!ms.length) return h('p', { class: 'muted center' }, t('search.none'));
     const th = report.thresholds || state.thresholds;
     const cell = (stat, level, text) => h('td', { class: `cnum ${gradeClass(stat, level)}`, title: level === 'none' ? '' : t(`lv.${level}`) }, text, level !== 'none' ? h('span', { class: 'sr-only' }, ` (${t(`lv.${level}`)})`) : null);
-    const row = (label, rival, c, total) => {
+    const row = (label, rival, c, total, ha) => {
       const p = percentages(c), g = gradeAll(c, th, { perMatch: !total });
       return h('tr', { class: total ? 'total' : '' },
-        h('th', { scope: 'row' }, label), h('td', null, rival),
+        h('th', { scope: 'row' }, label), h('td', null, rival, ha ? h('span', { class: 'ha-tag' }, ha) : null),
         ...COLS.map((k) => (k === 'possessions' ? cell('possessions', g.possessions, c[k]) : h('td', { class: 'cnum' }, c[k]))),
         cell('off_eff', g.off_eff, fmtPct(p.off_eff)), cell('loss_pct', g.loss_pct, fmtPct(p.loss_pct)), h('td', { class: 'cnum' }, fmtPct(p.shot_eff)), cell('save_pct', g.save_pct, fmtPct(p.save_pct)));
     };
     return h('div', { class: 'table-wrap wide' }, h('table', { class: 'tbl matches' },
       h('thead', null, h('tr', null, h('th', null, t('date')), h('th', null, t('rival')), ...COLS.map((c) => h('th', { title: t(`stat.${c}`) }, SHORT[c])), ...PCTS.map((p) => h('th', null, t(`pct.${p}.short`))))),
-      h('tbody', null, report.matches.map((m) => row(fmtDate(m.date).slice(0, 5), m.rival, m.counters, false)), row(t('rep.total'), '', report.totals, true))));
+      h('tbody', null, ms.map((m) => row(fmtDate(m.date).slice(0, 5), `${m.home_away === 'away' ? '@ ' : ''}${m.rival}`, m.counters, false, haText(m))), row(t('rep.total'), '', totals, true))));
+  }
+
+  // Pestaña «Jugadores»: todos juntos o uno elegido partido a partido
+  function playersTab() {
+    const hasData = (id) => report.players.rows.some((r) => r.player_id === id) || report.goalkeepers.rows.some((r) => r.player_id === id);
+    const info = report.players_info.filter((p) => !p.deleted_at || hasData(p.id)); // todos los jugadores del equipo, tengan o no datos
+    if (!info.length) return h('p', { class: 'muted center' }, t('rep.player_none'));
+    if (!info.some((p) => p.id === playerSel)) playerSel = '';
+    const vis = info.filter((p) => !hasQ() || normName(`${p.number ?? ''} ${p.name} ${p.surname || ''}`).includes(normName(q)) || p.id === playerSel);
+    const pick = h('div', { class: 'chips people no-print' },
+      h('button', { type: 'button', class: `chip${!cmpMode && playerSel === '' ? ' on' : ''}`, onclick: () => { cmpMode = false; playerSel = ''; lsSet('urd.rep.player', ''); render(); } }, t('rep.all_players')),
+      h('button', { type: 'button', class: `chip wide${cmpMode ? ' on' : ''}`, onclick: () => { cmpMode = !cmpMode; cmp = []; render(); } }, `⇄ ${t('cmp.btn')}`),
+      vis.map((p) => (cmpMode
+        ? h('button', { type: 'button', class: `chip${cmp.includes(p.id) ? ' on' : ''}`, 'aria-pressed': cmp.includes(p.id) ? 'true' : 'false', onclick: () => { cmp = cmp.includes(p.id) ? cmp.filter((x) => x !== p.id) : [...cmp.slice(-1), p.id]; render(); } }, h('b', null, p.number ?? '·'), ' ', `${p.name}${p.surname ? ' ' + p.surname : ''}`)
+        : h('button', { type: 'button', class: `chip${playerSel === p.id ? ' on' : ''}`, onclick: () => { playerSel = p.id; lsSet('urd.rep.player', p.id); render(); } }, h('b', null, p.number ?? '·'), ' ', `${p.name}${p.surname ? ' ' + p.surname : ''}`))),
+      !vis.length ? h('span', { class: 'muted' }, t('search.none')) : null);
+    if (cmpMode) return [pick, compareTable()];
+    if (!playerSel) return [pick, playersTable(report.players, nameOf), keepersTable(report.goalkeepers, nameOf)];
+    const label = (m) => `${m.rival} ${fmtDate(m.date).slice(0, 5)}`;
+    const mById = new Map(report.matches.map((m) => [m.id, m]));
+    const rowsP = [], rowsK = [];
+    for (const bm of report.by_match) {
+      const m = mById.get(bm.match_id);
+      const p = bm.players.find((r) => r.player_id === playerSel), k = bm.keepers.find((r) => r.player_id === playerSel);
+      if (p) rowsP.push({ ...p, player_id: bm.match_id });
+      if (k) rowsK.push({ ...k, player_id: bm.match_id });
+    }
+    const totP = report.players.rows.find((r) => r.player_id === playerSel), totK = report.goalkeepers.rows.find((r) => r.player_id === playerSel);
+    if (totP) rowsP.push({ ...totP, player_id: '__total' });
+    if (totK) rowsK.push({ ...totK, player_id: '__total' });
+    const name = (id) => (id === '__total' ? t('rep.total') : label(mById.get(id)));
+    return [pick,
+      playersTable({ rows: rowsP, caption: `${nameOf(playerSel)} · ${t('tbl.players')}` }, name),
+      keepersTable({ rows: rowsK, caption: `${nameOf(playerSel)} · ${t('tbl.keepers')}` }, name)];
+  }
+
+  // Comparar dos jugadores/as lado a lado (lo mejor de cada fila, en negrita)
+  function compareTable() {
+    const A = cmp.map((id) => ({ id, p: report.players.rows.find((r) => r.player_id === id) || {}, k: report.goalkeepers.rows.find((r) => r.player_id === id) }));
+    if (A.length < 2) return h('p', { class: 'muted center' }, t('cmp.pick'));
+    const pct = (a, b) => (b > 0 ? a / b : null);
+    const rows = [
+      [t('stat.goals'), (x) => x.p.goals || 0, true], [t('col.shots'), (x) => x.p.shots || 0, true],
+      [t('pct.shot_eff.short'), (x) => pct(x.p.goals || 0, x.p.shots || 0), true, true],
+      [t('col.losses'), (x) => x.p.losses || 0, false], [t('sub.robo'), (x) => x.p.steals || 0, true], [t('sub.chapa'), (x) => x.p.blocks || 0, true],
+      [t('sub.dos_min'), (x) => x.p.two_min || 0, false], [t('col.poss'), (x) => x.p.possessions || 0, true],
+    ];
+    if (A.some((x) => x.k)) rows.push([t('stat.saves'), (x) => x.k?.saves || 0, true], [t('stat.goals_against'), (x) => x.k?.goals_against || 0, false], [t('pct.save_pct.short'), (x) => (x.k && x.k.saves + x.k.goals_against > 0 ? x.k.save_pct : null), true, true]);
+    const fmt = (v, isPct) => (v == null ? '–' : isPct ? fmtPct(v) : v);
+    return h('div', { class: 'table-wrap' }, h('table', { class: 'tbl cmp' },
+      h('thead', null, h('tr', null, h('th', null, ''), A.map((x) => h('th', null, nameOf(x.id))))),
+      h('tbody', null, rows.map(([label, get, high, isPct]) => {
+        const v = A.map(get), ok = v[0] != null && v[1] != null && v[0] !== v[1];
+        const best = ok ? (high ? (v[0] > v[1] ? 0 : 1) : (v[0] < v[1] ? 0 : 1)) : -1;
+        return h('tr', null, h('th', { scope: 'row' }, label), v.map((val, i) => h('td', { class: `cnum${best === i ? ' best' : ''}` }, fmt(val, isPct))));
+      }))));
+  }
+
+  // «Forma»: últimos 5 partidos frente al total de la temporada
+  function formBlock() {
+    const ms = report.matches;
+    if (ms.length < 4) return null;
+    const last = ms.slice(-5), lastC = sumCounters(last.map((m) => m.counters)), all = percentages(report.totals), now = percentages(lastC);
+    const defs = [['off_eff', true], ['shot_eff', true], ['loss_pct', false], ['save_pct', true]];
+    return h('div', { class: 'bw' }, h('h2', null, t('rep.form', { n: last.length })),
+      defs.map(([k, high]) => {
+        const d = now[k] - all[k], good = Math.abs(d) < 0.005 ? null : (d > 0) === high;
+        return h('div', { class: 'bw-row' }, h('strong', null, t(`pct.${k}`)),
+          h('span', null, fmtPct(now[k]), ' ', h('span', { class: good == null ? 'muted' : good ? 'trend up' : 'trend down' }, good == null ? '＝' : d > 0 ? '▲' : '▼', ` ${d > 0 ? '+' : ''}${(d * 100).toFixed(1)}`)),
+          h('span', { class: 'muted small' }, `${t('rep.season_avg')}: ${fmtPct(all[k])}`));
+      }));
   }
 
   function bestWorst() {
@@ -129,22 +215,25 @@ export function reportsView(root) {
     if (error) return h('p', { class: 'warn' }, error);
     if (!report) return null;
     if (S.tab === 'matches') {
-      return [matchesTable(), report.matches.length ? lineChart(report.matches, state.thresholds) : null, report.matches.length ? h('p', { class: 'muted small' }, t('rep.legend')) : null];
+      const ms = shownMatches();
+      return [matchesTable(ms, hasQ() ? sumCounters(ms.map((m) => m.counters)) : report.totals), ms.length ? lineChart(ms, state.thresholds) : null, ms.length ? h('p', { class: 'muted small' }, t('rep.legend')) : null];
     }
     if (S.tab === 'season') {
       const c = report.totals, n = report.matches.length;
       return n ? [
         h('div', { class: 'score big-score' }, t('rep.matches_n', { n }), h('span', { class: 'muted small' }, ` · ${t('rep.avg_poss', { n: (c.possessions / n).toFixed(1) })}`)),
-        countersGrid(c), warningsBox(c), percentBlock(c, state.thresholds), bestWorst(),
+        countersGrid(c), warningsBox(c), percentBlock(c, state.thresholds), formBlock(), bestWorst(),
         playersTable(report.players, nameOf), keepersTable(report.goalkeepers, nameOf),
         h('h2', null, t('maps.title')), mapsBlock(report.zones, report.cells, true),
       ] : h('p', { class: 'muted center' }, t('rep.none'));
     }
-    return report.matches.length
-      ? h('div', { class: 'cards' }, [...report.matches].reverse().map((m) => h('a', { class: 'match-card', href: `#/summary/${m.id}` },
-        h('div', { class: 'mc-date' }, fmtDate(m.date).slice(0, 5)), h('div', { class: 'mc-main' }, h('strong', null, m.rival)),
+    if (S.tab === 'players') return report.matches.length ? playersTab() : h('p', { class: 'muted center' }, t('rep.none'));
+    const list = shownMatches();
+    return list.length
+      ? h('div', { class: 'cards' }, [...list].reverse().map((m) => h('a', { class: 'match-card', href: `#/summary/${m.id}` },
+        h('div', { class: 'mc-date' }, fmtDate(m.date).slice(0, 5)), h('div', { class: 'mc-main' }, h('strong', null, `${m.home_away === 'away' ? '@ ' : ''}${m.rival}`), h('span', { class: 'muted small' }, haText(m))),
         h('div', { class: 'mc-score' }, m.counters.goals, '–', m.counters.goals_against), h('span', { class: 'chev' }, '›'))))
-      : h('p', { class: 'muted center' }, t('rep.none'));
+      : h('p', { class: 'muted center' }, report.matches.length ? t('search.none') : t('rep.none'));
   }
 
   function render() {
@@ -160,8 +249,9 @@ export function reportsView(root) {
             field(t('rival'), h('select', { onchange: (e) => { S.rival = e.target.value; load(); } }, h('option', { value: '' }, t('rep.any')), ...state.rivals.map((r) => h('option', { value: r.id, selected: r.id === S.rival }, r.name)))),
             h('div', { class: 'two' }, field(t('rep.from'), h('input', { type: 'date', value: S.from, onchange: (e) => { S.from = e.target.value; load(); } })), field(t('rep.to'), h('input', { type: 'date', value: S.to, onchange: (e) => { S.to = e.target.value; load(); } }))),
             segmented([{ value: '', label: t('rep.any') }, { value: 'home', label: t('home') }, { value: 'away', label: t('away') }], S.ha, (v) => { S.ha = v; load(); })))),
-      segmented(['matches', 'season', 'match'].map((k) => ({ value: k, label: t(`rep.tab.${k}`) })), S.tab, (v) => { S.tab = v; lsSet('urd.rep', S); render(); }, t('rep.title')),
-      body(),
+      segmented(['matches', 'season', 'players', 'match'].map((k) => ({ value: k, label: t(`rep.tab.${k}`) })), S.tab, (v) => { S.tab = v; lsSet('urd.rep', S); render(); }, t('rep.title')),
+      report && S.tab !== 'season' ? searchBox(t(S.tab === 'players' ? 'search.player' : 'search.rival'), q, (v) => { q = v; if (bodyBox) bodyBox.replaceChildren(...[].concat(body() || [])); }) : null,
+      bodyBox = h('div', null, ...[].concat(body() || [])),
       report && report.matches.length ? h('div', { class: 'btn-row wrap no-print' },
         h('button', { class: 'btn primary', type: 'button', onclick: () => window.print() }, t('export.pdf')),
         h('button', { class: 'btn', type: 'button', onclick: exportXlsx }, t('export.xlsx')),

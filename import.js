@@ -2,23 +2,25 @@
 import { h, toast, fmtDate } from '../dom.js';
 import { t } from '../i18n.js';
 import { state, api, loadBootstrap } from '../store.js';
-import { segmented, field, backBar, errMsg } from '../ui.js';
+import { segmented, field, backBar, errMsg, dropZone } from '../ui.js';
 import { readFileRows, downloadXlsx, downloadCsv } from '../files.js';
 import { playersTemplate, simpleTemplate, advancedTemplate } from '../templates.js';
+import { keeperTemplate, parseKeeperWorkbook } from '../keeper-grid.js';
 import { currentTeamId } from './home.js';
+import { inpescaPanel } from './import-inpesca.js';
 
-const KINDS = ['players', 'simple', 'advanced'];
+const KINDS = ['inpesca', 'players', 'simple', 'advanced', 'keeper'];
 
 export function importView(root, params = {}) {
   const page = h('div', { class: 'page' });
   root.append(page);
-  const S = { kind: KINDS.includes(params.kind) ? params.kind : 'players', rows: null, fileName: '', report: null, busy: false, error: '',
+  const S = { kind: KINDS.includes(params.kind) ? params.kind : 'inpesca', panel: null, rows: null, fileName: '', report: null, busy: false, error: '',
     defaultTeam: '', ignoreErrors: false, dup: '', createTeams: false, done: null };
   const teamNames = () => state.teams.map((x) => x.name);
   const firstTeam = () => state.teams.find((x) => x.id === currentTeamId())?.name || state.teams[0]?.name || '';
 
-  const tpl = () => (S.kind === 'players' ? playersTemplate : S.kind === 'simple' ? simpleTemplate : advancedTemplate)(firstTeam());
-  const fileBase = () => ({ players: 'plantilla-jugadores', simple: 'plantilla-estadisticas', advanced: 'plantilla-eventos' }[S.kind]);
+  const tpl = () => (S.kind === 'players' ? playersTemplate : S.kind === 'simple' ? simpleTemplate : S.kind === 'keeper' ? keeperTemplate : advancedTemplate)(firstTeam());
+  const fileBase = () => ({ players: 'plantilla-jugadores', simple: 'plantilla-estadisticas', advanced: 'plantilla-eventos', keeper: 'plantilla-porteria' }[S.kind]);
 
   // Las filas sin equipo usan el equipo elegido (útil con el Excel antiguo del club)
   const withTeam = () => S.rows.map((r) => {
@@ -30,8 +32,8 @@ export function importView(root, params = {}) {
   async function call(dry, extra = {}) {
     S.busy = true; S.error = ''; render();
     try {
-      const url = S.kind === 'players' ? '/api/import/players' : '/api/import/matches';
-      const body = { rows: withTeam(), dry_run: dry, ...(S.kind === 'players' ? {} : { kind: S.kind }), ...extra };
+      const url = S.kind === 'players' ? '/api/import/players' : S.kind === 'keeper' ? '/api/import/keeper-detail' : '/api/import/matches';
+      const body = { rows: withTeam(), dry_run: dry, ...(S.kind === 'players' || S.kind === 'keeper' ? {} : { kind: S.kind }), ...extra };
       const rep = await api('POST', url, body);
       S.report = rep;
       if (!dry && rep.committed) { S.done = rep; S.rows = null; await loadBootstrap(); toast(t('imp.done')); }
@@ -42,7 +44,7 @@ export function importView(root, params = {}) {
   async function onFile(file) {
     if (!file) return;
     S.fileName = file.name; S.report = null; S.done = null; S.error = ''; S.dup = ''; S.ignoreErrors = false; S.createTeams = false;
-    try { S.rows = await readFileRows(file); } catch (e) { S.rows = null; S.error = e.code === 'no_headers' ? t('imp.no_headers') : t('imp.read_error'); render(); return; }
+    try { S.rows = (S.kind === 'keeper' && /\.xlsx?$/i.test(file.name) && await parseKeeperWorkbook(await file.arrayBuffer())) || await readFileRows(file); } catch (e) { S.rows = null; S.error = e.code === 'no_headers' ? t('imp.no_headers') : t('imp.read_error'); render(); return; }
     if (!S.rows.length) { S.error = t('imp.empty'); render(); return; }
     await call(true);
   }
@@ -53,9 +55,32 @@ export function importView(root, params = {}) {
     return `${t('imp.row')} ${e.row}: ${text}${e.name ? ` (${e.name})` : ''}${e.number != null ? ` (${e.number})` : ''}${e.field ? ` (${e.field})` : ''}`;
   };
 
+  function keeperReport(r) {
+    const ok = r.matches.length > 0;
+    const dis = S.busy || !ok || (r.errors.length && !S.ignoreErrors);
+    return h('div', { class: 'report' },
+      h('h2', null, t('imp.report')),
+      h('p', { class: 'muted' }, t('imp.keeper.safe')),
+      r.matches.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'tbl' },
+        h('thead', null, h('tr', null, h('th', null, t('date')), h('th', null, t('rival')), h('th', null, '🧤'), h('th', null, t('ev.save')), h('th', null, t('ev.goal_against')))),
+        h('tbody', null, r.matches.map((m) => {
+          const cell = (x) => (x ? `${x.fit}/${x.rows}${x.over ? ` ⚠ +${x.over}` : ''}` : '–');
+          return h('tr', null, h('td', null, fmtDate(m.date)), h('td', null, m.rival), h('td', null, m.keeper), h('td', null, cell(m.types.save)), h('td', null, cell(m.types.goal_against)));
+        })))) : null,
+      r.errors.length ? h('div', { class: 'warn' }, h('strong', null, t('imp.errors', { n: r.errors.length })),
+        h('ul', null, r.errors.slice(0, 30).map((e) => h('li', null, errText(e))))) : null,
+      r.has_excess ? h('div', { class: 'stack' }, h('h3', null, t('imp.keeper.excess')),
+        segmented([{ value: 'skip', label: t('imp.keeper.skip') }, { value: 'add', label: t('imp.keeper.add') }], S.excess || 'skip', (v) => { S.excess = v; render(); })) : null,
+      r.errors.length && ok ? h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: S.ignoreErrors, onchange: (e) => { S.ignoreErrors = e.target.checked; render(); } }), t('imp.ignore_errors')) : null,
+      h('div', { class: 'btn-row' },
+        h('button', { class: 'btn', type: 'button', onclick: () => { S.rows = null; S.report = null; S.fileName = ''; render(); } }, t('cancel')),
+        h('button', { class: 'btn primary', type: 'button', disabled: dis, onclick: () => call(false, { excess: S.excess || 'skip', ignore_errors: S.ignoreErrors }) }, t('imp.go'))));
+  }
+
   function reportBox() {
     const r = S.report;
     if (!r) return null;
+    if (S.kind === 'keeper') return keeperReport(r);
     const isPlayers = S.kind === 'players';
     const dupCount = isPlayers ? r.update.length : r.duplicates;
     const good = isPlayers ? r.create.length + r.update.length + r.unchanged.length : r.matches.filter((m) => !m.invalid).length;
@@ -90,18 +115,27 @@ export function importView(root, params = {}) {
   }
 
   function render() {
+    if (S.kind === 'inpesca') {
+      S.panel = S.panel || inpescaPanel();
+      page.replaceChildren(
+        backBar(t('imp.title'), () => history.back()),
+        segmented(KINDS.map((k) => ({ value: k, label: t(`imp.kind.${k}`) })), S.kind, (v) => { S.kind = v; S.rows = null; S.report = null; S.done = null; S.error = ''; S.fileName = ''; render(); }, t('imp.kind')),
+        h('p', { class: 'muted' }, t('imp.help.inpesca')), S.panel);
+      return;
+    }
     page.replaceChildren(
       backBar(t('imp.title'), () => history.back()),
-      segmented(KINDS.map((k) => ({ value: k, label: t(`imp.kind.${k}`) })), S.kind, (v) => { S.kind = v; S.rows = null; S.report = null; S.done = null; S.error = ''; S.fileName = ''; render(); }, t('imp.kind')),
+      segmented(KINDS.map((k) => ({ value: k, label: t(`imp.kind.${k}`) })), S.kind, (v) => { S.kind = v; S.panel = null; S.rows = null; S.report = null; S.done = null; S.error = ''; S.fileName = ''; render(); }, t('imp.kind')),
       h('p', { class: 'muted' }, t(`imp.help.${S.kind}`)),
       h('div', { class: 'btn-row wrap' },
         h('button', { class: 'btn', type: 'button', onclick: () => downloadXlsx(`${fileBase()}.xlsx`, tpl()) }, '⬇ ', t('imp.tpl_xlsx')),
-        h('button', { class: 'btn', type: 'button', onclick: () => downloadCsv(`${fileBase()}.csv`, tpl()[0].aoa) }, '⬇ ', t('imp.tpl_csv'))),
+        S.kind === 'keeper' ? null : h('button', { class: 'btn', type: 'button', onclick: () => downloadCsv(`${fileBase()}.csv`, tpl()[0].aoa) }, '⬇ ', t('imp.tpl_csv'))),
       state.teams.length > 1 ? field(t('imp.default_team'),
         h('select', { onchange: (e) => { S.defaultTeam = e.target.value; if (S.rows) call(true); } },
           h('option', { value: '' }, t('imp.default_none')), ...teamNames().map((n) => h('option', { value: n, selected: n === S.defaultTeam }, n))), t('imp.default_team_hint')) : null,
-      h('label', { class: 'file-pick' }, h('span', { class: 'btn primary big' }, S.fileName ? `📄 ${S.fileName}` : t('imp.choose')),
-        h('input', { type: 'file', accept: '.csv,.xlsx,.xls,.txt', class: 'sr-only', onchange: (e) => onFile(e.target.files[0]) })),
+      dropZone(h('label', { class: 'file-pick' }, h('span', { class: 'btn primary big' }, S.fileName ? `📄 ${S.fileName}` : t('imp.choose')),
+        h('span', { class: 'muted small drop-hint' }, t('imp.drop')),
+        h('input', { type: 'file', accept: '.csv,.xlsx,.xls,.txt', class: 'sr-only', onchange: (e) => onFile(e.target.files[0]) })), onFile),
       S.busy ? h('p', { class: 'muted center' }, t('loading')) : null,
       S.error ? h('p', { class: 'warn', role: 'alert' }, S.error) : null,
       S.done ? h('div', { class: 'ok-box' }, '✓ ', t('imp.done'), S.done.created != null ? ` — ${t('imp.created', { n: S.done.created })}` : '') : null,

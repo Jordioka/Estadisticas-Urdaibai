@@ -1,4 +1,5 @@
 // Utilidades mínimas de interfaz (sin librerías)
+import { prefOn } from './prefs.js';
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 // Los métodos nativos convierten arrays y null en texto ("null", "[object HTMLDivElement]").
@@ -53,16 +54,17 @@ export const today = () => { const d = new Date(); return `${d.getFullYear()}-${
 
 // ---------- Avisos breves ----------
 let toastTimer;
-export function toast(msg, kind = 'ok') {
+export function toast(msg, kind = 'ok', action = null) { // action: { label, run } → botón dentro del aviso (p. ej. «Deshacer»)
   let el = document.getElementById('toast');
   if (!el) { el = h('div', { id: 'toast', role: 'status', 'aria-live': 'polite' }); document.body.append(el); }
-  el.className = `toast ${kind} show`;
+  el.className = `toast ${kind} show${action ? ' has-action' : ''}`;
   el.textContent = msg;
+  if (action) el.append(h('button', { type: 'button', class: 'toast-act', onclick: () => { el.classList.remove('show'); action.run(); } }, action.label));
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), kind === 'error' ? 4500 : 1600);
+  toastTimer = setTimeout(() => el.classList.remove('show'), kind === 'error' ? 4500 : action ? 4000 : 1600);
 }
 
-export const vibrate = (ms = 25) => { try { navigator.vibrate?.(ms); } catch { /* sin vibración */ } };
+export const vibrate = (ms = 25) => { try { if (prefOn('vibrate')) navigator.vibrate?.(ms); } catch { /* sin vibración */ } };
 
 // ---------- Hoja inferior (diálogos) ----------
 export function sheet({ title, body, onClose, full = false }) {

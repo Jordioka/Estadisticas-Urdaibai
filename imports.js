@@ -1,8 +1,9 @@
 // Importación desde CSV/Excel (las filas llegan ya leídas por el navegador).
 // Siempre: 1) validar y mostrar informe (dry_run), 2) guardar solo cuando el usuario confirma.
 import {
-  COUNTERS, validateEvent, isIsoDate, ZONES, counterWarnings,
+  COUNTERS, validateEvent, isIsoDate, ZONES, counterWarnings, totalCounters, keeperCoverage,
 } from '../public/js/stats.js';
+import { eventsFor, adjustmentsFor } from './reports.js';
 import { HttpError, nowIso, uuid, normName, cleanStr, accessibleTeams, audit, ensureSeason, requireAdmin } from './core.js';
 import { playerFields } from './ops.js';
 
@@ -41,6 +42,7 @@ const ALIAS = {
   pressure: ['presion', 'pressure'],
   phase: ['fase', 'phase'],
   subtype: ['detalle', 'detail', 'subtipo', 'xehetasuna'],
+  venue: ['condicion', 'casafuera', 'local', 'venue', 'campo'],
   possessions: ['posesiones', 'possessions', 'posesioak'],
   losses: ['perdidas', 'losses', 'galerak'],
   shots: ['lanzamientos', 'shots', 'jaurtiketak'],
@@ -273,7 +275,8 @@ export async function importMatches(ctx, body) {
     const gkey = `${t.team.id}|${date}|${rival.id}`;
     let g = groups.get(gkey);
     if (!g) {
-      g = { team: t.team, date, rival, counters: Object.fromEntries(COUNTERS.map((c) => [c, 0])), events: [], rows: [] };
+      const vv = key(A('venue') ?? '');
+      g = { team: t.team, date, rival, home_away: ['fuera', 'visitante', 'away', 'kanpoan', 'x'].includes(vv) ? 'away' : 'home', counters: Object.fromEntries(COUNTERS.map((c) => [c, 0])), events: [], rows: [] };
       groups.set(gkey, g);
       matchesList.push(g);
     }
@@ -336,12 +339,27 @@ export async function importMatches(ctx, body) {
       ? await ctx.db.all('SELECT id FROM matches WHERE team_id = ? AND rival_id = ? AND date = ? AND deleted_at IS NULL', g.team.id, rivalMap.get(normName(g.rival.name)).id, g.date)
       : [];
     g.existing = existing.map((x) => x.id);
+    // Marcador ya guardado (para compararlo con el nuevo) y partidos «parecidos»: mismo rival, fecha distinta pero cercana (±7 días)
+    g.existing_score = null;
+    if (g.existing.length) {
+      const ev = await eventsFor(ctx.db, [g.existing[0]]), adj = await adjustmentsFor(ctx.db, [g.existing[0]]);
+      const c = totalCounters(ev, adj);
+      g.existing_score = { goals: c.goals, goals_against: c.goals_against, events: ev.length };
+    }
+    g.similar = [];
+    if (rivalMap.has(normName(g.rival.name))) {
+      const sim = await ctx.db.all(
+        "SELECT id, date FROM matches WHERE team_id = ? AND rival_id = ? AND deleted_at IS NULL AND date <> ? AND date BETWEEN date(?, '-7 day') AND date(?, '+7 day')",
+        g.team.id, rivalMap.get(normName(g.rival.name)).id, g.date, g.date, g.date);
+      g.similar = sim.map((x) => x.date);
+    }
     const season = await ctx.db.first('SELECT closed FROM seasons WHERE ? BETWEEN start_date AND end_date', g.date);
     if (season?.closed && ctx.user.role !== 'admin') { report.errors.push({ row: g.rows[0], error: 'season_closed' }); g.invalid = true; }
     if (kind === 'simple') for (const w of counterWarnings(g.counters)) report.warnings.push({ row: g.rows[0], warning: w });
     if (g.existing.length) report.duplicates++;
     report.matches.push({
       team: g.team.name, date: g.date, rival: g.rival.name, rows: g.rows, duplicate: g.existing.length > 0, invalid: !!g.invalid,
+      existing_score: g.existing_score, similar: g.similar,
       ...(kind === 'simple' ? { counters: g.counters } : { events: g.events.length }),
     });
   }
@@ -370,8 +388,8 @@ export async function importMatches(ctx, body) {
     const seasonId = await ensureSeason(ctx.db, g.date);
     const now = nowIso();
     stmts.push(ctx.db.stmt(
-      "INSERT INTO matches (id, team_id, rival_id, date, home_away, season_id, is_practice, created_by, created_at, updated_at) VALUES (?,?,?,?, 'home', ?,0,?,?,?)",
-      mid, g.team.id, g.rival.id, g.date, seasonId, ctx.user.id, now, now));
+      "INSERT INTO matches (id, team_id, rival_id, date, home_away, season_id, is_practice, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,0,?,?,?)",
+      mid, g.team.id, g.rival.id, g.date, g.home_away, seasonId, ctx.user.id, now, now));
     if (kind === 'simple') {
       for (const c of COUNTERS)
         if (g.counters[c] !== 0) stmts.push(ctx.db.stmt('INSERT INTO adjustments (match_id, stat, delta, updated_by, updated_at) VALUES (?,?,?,?,?)', mid, c, g.counters[c], ctx.user.id, now));
@@ -390,5 +408,129 @@ export async function importMatches(ctx, body) {
   report.committed = true;
   report.created = created;
   await audit(ctx, `import.matches.${kind}`, 'matches', null, { created, mode: onDup });
+  return report;
+}
+
+// ================= DETALLE DE PORTERÍA (zona × cuadrado) =================
+// Filas planas: Equipo, Fecha, Rival, Portero, Tipo (parada/gol), Zona, Punto portería, Cantidad.
+// Se asocia a un partido que ya existe. NUNCA suma al total del partido: rellena paradas/goles sin portero
+// y, si hay hueco, crea eventos «solo detalle». Lo que sobra solo se añade al total si el usuario lo pide.
+const KT_MAP = { parada: 'save', paradas: 'save', save: 'save', saves: 'save', geldiketa: 'save', geldiketak: 'save',
+  gol: 'goal_against', goles: 'goal_against', golencontra: 'goal_against', golesencontra: 'goal_against', goal: 'goal_against', goals: 'goal_against', gola: 'goal_against', golak: 'goal_against' };
+
+export async function importKeeperDetail(ctx, body) {
+  const rows = prepRows(body);
+  const dry = body.dry_run !== false;
+  const excessMode = body.excess === 'add' ? 'add' : 'skip';
+  const teams = await makeTeamResolver(ctx, { createTeams: false });
+  const report = { kind: 'keeper', total: 0, matches: [], errors: [], warnings: [], unknown_teams: [], committed: false };
+  const groups = new Map();
+  const cache = { players: new Map(), matches: new Map() };
+  const playersOf = async (tid) => {
+    if (!cache.players.has(tid)) cache.players.set(tid, await ctx.db.all('SELECT id, name, surname, number, is_goalkeeper FROM players WHERE team_id = ? AND deleted_at IS NULL', tid));
+    return cache.players.get(tid);
+  };
+  for (let i = 0; i < rows.length; i++) {
+    const get = reader(rows[i]);
+    const A = (...a) => get(...a);
+    if (![...Object.values(rows[i])].some((v) => v !== '' && v != null)) continue;
+    const err = (code, extra = {}) => report.errors.push({ row: rowNo(i), error: code, ...extra });
+    report.total++;
+    const t = teams.resolve(A(...ALIAS.team));
+    if (t.error) { err(t.error, { name: t.name }); continue; }
+    const date = parseDate(A(...ALIAS.date));
+    if (!date) { err('invalid_date'); continue; }
+    const rivalName = cleanStr(A(...ALIAS.rival), 80);
+    if (!rivalName) { err('rival_required'); continue; }
+    const type = KT_MAP[key(A('tipo', 'type', 'mota') ?? '')];
+    if (!type) { err('invalid_event_type'); continue; }
+    const rawZone = A(...ALIAS.zone);
+    let zone = null;
+    if (rawZone != null) {
+      zone = String(rawZone).trim().toUpperCase();
+      if (!ZONES.includes(zone)) { err('invalid_zone'); continue; }
+    }
+    const rawCell = A(...ALIAS.point);
+    let cell = null;
+    if (rawCell != null) {
+      cell = Number(rawCell);
+      if (!Number.isInteger(cell) || cell < 1 || cell > 9) { err('invalid_goal_cell'); continue; }
+    }
+    const qty = A('cantidad', 'quantity', 'kopurua', 'n') == null ? 1 : parseCount(A('cantidad', 'quantity', 'kopurua', 'n'));
+    if (Number.isNaN(qty)) { err('invalid_number', { field: 'cantidad' }); continue; }
+    if (qty === 0) continue;
+    if (zone == null && cell == null) { err('zone_or_cell_required'); continue; }
+    const players = await playersOf(t.team.id);
+    const gk = A(...ALIAS.goalkeeper, 'portero');
+    if (gk == null) { err('player_required'); continue; }
+    const f = findPlayer(players.filter((p) => p.is_goalkeeper), gk);
+    if (f.error) { err(f.error, { name: String(gk) }); continue; }
+    const gkey = `${t.team.id}|${date}|${normName(rivalName)}|${f.player.id}`;
+    let g = groups.get(gkey);
+    if (!g) { g = { team: t.team, date, rivalName, keeper: f.player, items: { save: [], goal_against: [] }, rows: [] }; groups.set(gkey, g); }
+    g.rows.push(rowNo(i));
+    for (let n = 0; n < qty; n++) g.items[type].push({ zone, cell });
+  }
+
+  const stmts = [];
+  const now = nowIso();
+  let created = 0, completed = 0, added = 0, skipped = 0, seq = 0;
+  const loaded = new Map(); // partido → { events, adjustments } (acumulado entre grupos, p. ej. dos porteros)
+  for (const g of groups.values()) {
+    const mk = `${g.team.id}|${g.date}|${normName(g.rivalName)}`;
+    if (!cache.matches.has(mk)) {
+      const cand = await ctx.db.all(
+        'SELECT m.id, m.season_id, r.name AS rival FROM matches m JOIN teams r ON r.id = m.rival_id WHERE m.deleted_at IS NULL AND m.team_id = ? AND m.date = ?', g.team.id, g.date);
+      cache.matches.set(mk, cand.filter((c) => normName(c.rival) === normName(g.rivalName)));
+    }
+    const found = cache.matches.get(mk);
+    if (found.length !== 1) { for (const r of g.rows) report.errors.push({ row: r, error: found.length ? 'match_ambiguous' : 'match_not_found', name: g.rivalName }); continue; }
+    const match = found[0];
+    if (ctx.user.role !== 'admin' && match.season_id) {
+      const se = await ctx.db.first('SELECT closed FROM seasons WHERE id = ?', match.season_id);
+      if (se?.closed) { for (const r of g.rows) report.errors.push({ row: r, error: 'season_closed' }); continue; }
+    }
+    if (!loaded.has(match.id)) loaded.set(match.id, { events: await eventsFor(ctx.db, [match.id]), adjustments: await adjustmentsFor(ctx.db, [match.id]) });
+    const L = loaded.get(match.id);
+    const line = { rival: g.rivalName, date: g.date, keeper: `${g.keeper.name} ${g.keeper.surname || ''}`.trim(), types: {} };
+    for (const type of ['save', 'goal_against']) {
+      const items = g.items[type];
+      if (!items.length) continue;
+      const cov = keeperCoverage(L.events, L.adjustments, type);
+      const room = Math.max(0, cov.free);
+      const fit = Math.min(room, items.length);
+      const over = items.length - fit;
+      line.types[type] = { rows: items.length, fit, over, total: cov.total };
+      const pendingEv = L.events.filter((e) => e.type === type && !e.deleted_at && !e.goalkeeper_id && !e.detail_only);
+      const fields = (it) => ({ zone: it.zone, goal_cell: it.cell, phase: it.zone === '7M' ? 'penalti' : null });
+      items.forEach((it, idx) => {
+        const ts = new Date(Date.parse(now) + seq++).toISOString();
+        const fl = fields(it);
+        if (idx < fit && idx < pendingEv.length) {
+          const pe = pendingEv[idx];
+          stmts.push(ctx.db.stmt('UPDATE events SET goalkeeper_id = ?, zone = ?, goal_cell = ?, phase = COALESCE(?, phase), updated_at = ? WHERE id = ?', g.keeper.id, fl.zone, fl.goal_cell, fl.phase, ts, pe.id));
+          pe.goalkeeper_id = g.keeper.id; completed++;
+        } else if (idx < fit || (over && excessMode === 'add')) {
+          const detail = idx < fit ? 1 : 0;
+          stmts.push(ctx.db.stmt(
+            'INSERT INTO events (id, match_id, type, goalkeeper_id, zone, goal_cell, phase, detail_only, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+            uuid(), match.id, type, g.keeper.id, fl.zone, fl.goal_cell, fl.phase, detail, ctx.user.id, ts, ts));
+          if (detail) created++; else added++;
+        } else skipped++;
+      });
+      // refleja lo creado para que otro portero del mismo partido vea el hueco restante
+      for (let k = 0; k < Math.min(fit, items.length) - Math.min(pendingEv.length, fit); k++) L.events.push({ type, detail_only: 1, goal_cell: null, deleted_at: null, goalkeeper_id: g.keeper.id });
+      if (excessMode === 'add') for (let k = 0; k < over; k++) L.events.push({ type, detail_only: 0, deleted_at: null, goalkeeper_id: g.keeper.id });
+    }
+    report.matches.push(line);
+  }
+  report.summary = { completed, detail: created, added, skipped };
+  report.has_excess = report.matches.some((m) => Object.values(m.types).some((x) => x.over > 0));
+  if (dry) return report;
+  if (report.errors.length && !body.ignore_errors) return report;
+  for (let i = 0; i < stmts.length; i += 80) await ctx.db.batch(stmts.slice(i, i + 80));
+  report.committed = true;
+  report.created = created + completed + added;
+  await audit(ctx, 'import.keeper_detail', 'events', null, { detail: created, completed, added, skipped });
   return report;
 }

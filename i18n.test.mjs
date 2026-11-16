@@ -45,7 +45,7 @@ test('familias de claves dinámicas completas', () => {
   for (const r of ['out', 'post', 'block', 'save']) need.push(`result.${r}`);
   for (const w of ['negative', 'goals_gt_shots', 'against_gt_shots']) need.push(`warn.${w}`);
   for (const k of ['players', 'simple', 'advanced']) need.push(`imp.kind.${k}`, `imp.help.${k}`);
-  for (const k of ['matches', 'season', 'match']) need.push(`rep.tab.${k}`);
+  for (const k of ['matches', 'season', 'players', 'match']) need.push(`rep.tab.${k}`);
   for (const k of ['update', 'skip']) need.push(`imp.dup.${k}`);
   for (const k of ['replace', 'add', 'skip']) need.push(`imp.dup.${k}`);
   assert.deepEqual(need.filter((k) => !(k in D)), []);
