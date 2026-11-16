@@ -10,6 +10,7 @@ import { countersGrid, percentBlock, warningsBox, pill, segmented, field, backBa
 import { openDetailSheet, openPlayerPick } from '../shot-sheet.js';
 import { playersTable, keepersTable, mapsBlock } from './tables.js';
 import { shareMatch, topScorers } from '../share.js';
+import { keeperPanel } from '../keeper-map.js';
 
 const hhmm = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
@@ -152,6 +153,7 @@ export async function summaryView(root, { id }) {
       ev.length > 3 ? h('button', { class: 'btn', type: 'button', onclick: () => { showAll = !showAll; render(); } }, showAll ? t('events.less') : t('events.all', { n: ev.length })) : null,
       playersTable({ rows: playerStats(ev).filter((r) => r.player_id), unassigned: unassignedPlayers(c, playerStats(ev)) }, nameOf),
       keepersTable({ rows: goalkeeperStats(ev).filter((r) => r.player_id), unassigned: unassignedGoalkeepers(c, goalkeeperStats(ev)) }, nameOf),
+      ev.some((e) => ['save', 'goal_against'].includes(e.type) && (e.zone || e.goal_cell)) ? [h('h2', null, `🧤 ${t('gk.map')}`), keeperPanel({ events: ev, keepers: goalkeepers })] : null,
       h('h2', null, t('maps.title')), mapsBlock(zoneStats(ev), cellStats(ev), ev.some((e) => e.zone || e.goal_cell)));
   }
   render();

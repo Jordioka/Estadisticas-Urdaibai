@@ -76,11 +76,14 @@ export function courtSVG(opts = {}) {
     seven.addEventListener('click', () => opts.onSelect('7M'));
     seven.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); opts.onSelect('7M'); } });
   }
-  root.append(seven, sevenSub, texts);
+  const ov = svg('g', { 'pointer-events': 'none' }); // resalte de la zona elegida, encima de los colores
+  root.append(seven, sevenSub, ov, texts);
 
   const wrap = h('div', { class: 'court-wrap' }, root);
   const update = ({ selected, counts, heat, eff, pick } = {}) => {
+    ov.replaceChildren();
     for (const [z, { p, sub }] of Object.entries(zones)) {
+      if (pick === z) { const c = p.cloneNode(); c.removeAttribute('data-zone'); c.removeAttribute('role'); c.removeAttribute('tabindex'); c.removeAttribute('style'); c.setAttribute('class', 'zone-ov'); c.style.cssText = 'fill:#FFC000;fill-opacity:.8;stroke:#fff;stroke-width:.5;paint-order:stroke;filter:drop-shadow(0 0 .35px #000)'; ov.append(c); }
       p.classList.toggle('selected', selected === z);
       p.setAttribute('aria-pressed', selected === z || pick === z ? 'true' : 'false');
       p.classList.toggle('pick', pick === z);

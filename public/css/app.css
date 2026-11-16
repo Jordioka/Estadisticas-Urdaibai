@@ -303,8 +303,9 @@ a.player-card { cursor: pointer; }
 .gk-cell[data-eff="mid"], .zone[data-eff="mid"] { background: #8A7F86; fill: #8A7F86; color: #fff; border-color: #8A7F86; }
 .gk-cell[data-eff="bad"], .zone[data-eff="bad"] { background: #C14A5C; fill: #C14A5C; color: #fff; border-color: #C14A5C; }
 .gk-court .zone-count { font-size: 1.2px; fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.35); stroke-width: .12px; }
-.gk-cell.pick { outline: 4px solid var(--ink); outline-offset: -4px; }
-.zone.pick { outline: none; stroke: #1A1D21; stroke-width: .3; stroke-dasharray: none; filter: brightness(.9); }
+.gk-cell.pick { outline: 4px solid var(--ink); outline-offset: -4px; background: #FFC000 !important; color: #1A1D21 !important; border-color: #1A1D21 !important; }
+.zone.pick { outline: none; }
+.zone-ov { fill: #FFC000; fill-opacity: .6; stroke: #1A1D21; stroke-width: .45; pointer-events: none; }
 .gk-cell.pick { box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px var(--ink); }
 .gk-eff { text-align: center; margin: 8px 0 4px; font-size: 1.05rem; }
 .gk-steps { text-align: center; font-weight: 700; margin: 10px 0 6px; min-height: 1.6em; }
@@ -316,3 +317,7 @@ a.player-card { cursor: pointer; }
 .gk-dock { position: sticky; bottom: 70px; z-index: 5; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 6px 10px; margin: 8px 0; box-shadow: 0 -4px 14px rgba(0,0,0,.08); }
 .gk-dock .gk-steps { margin: 4px 0; } .gk-dock .gk-actions { margin: 4px 0 6px; }
 .gk-map .gk-cell { min-height: 68px; } .gk-map .gk-goal { gap: 5px; padding: 8px; }
+.gk-map .gk-cell { min-height: 52px; font-size: 1rem; } .gk-map .gk-goal { gap: 4px; padding: 6px; }
+.gk-map .gk-court { max-width: 330px; margin: 2px auto 0; }
+.gk-dock { padding: 4px 8px; } .gk-dock .gk-steps { font-size: .95rem; margin: 2px 0; min-height: 0; } .gk-dock .gk-actions .act { min-height: 56px; } .gk-dock .gk-actions { gap: 8px; margin: 4px 0; }
+.gk-eff { margin: 4px 0; font-size: .95rem; }

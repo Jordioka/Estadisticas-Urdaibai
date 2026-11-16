@@ -145,3 +145,7 @@ Si lo haces al revés, la web puede dar error hasta que se aplique la migración
 - Pestaña Portería rehecha: 1) cuadrado, 2) zona (los dos obligatorios), 3) aparecen los botones Parada / Gol. 7M = penalti automático.
 - Cuadrícula y campo muestran en vivo «paradas/lanzamientos» con color (verde ≥35 %, rojo <20 %). Al elegir una zona los cuadrados enseñan solo lo de esa zona, y al revés.
 - Botón «🧤 Mapa de portería» en las otras pestañas del partido: vista rápida con filtro por portero o «Todos».
+
+## v20
+- Al anotar (pestaña Portería) el mapa muestra siempre todos los datos; el cuadrado y la zona elegidos solo se resaltan (ámbar).
+- Resumen del partido: nuevo «Mapa de portería» (también en el botón rápido): se elige UNA cosa, un cuadrado o una zona, y el otro mapa se filtra con eso.
