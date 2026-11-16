@@ -78,7 +78,7 @@ export async function matchView(root, { id }) {
   let selPlayer = valid(lsGet(`urd.pl.${id}`, null), teamPlayers);
   let selKeeper = valid(lsGet(`urd.gk.${id}`, null), goalkeepers) || (goalkeepers.length === 1 ? goalkeepers[0].id : null);
   let goalDetail = lsGet('urd.gd', '1') === '1'; // pedir el punto de la portería al anotar
-  let gkRemove = false, gkAddAll = false, gkZone = null, gkCell = null; // pestaña Portería: cuadrado y zona son obligatorios
+  let gkRemove = false, gkAddAll = false, gkZone = null, gkCell = null, gkFocus = null; // pestaña Portería: cuadrado y zona son obligatorios
 
   const screen = h('div', { class: 'page match' });
   root.append(screen);
@@ -196,11 +196,11 @@ export async function matchView(root, { id }) {
       const ev = [...events()].reverse().find((e) => e.type === type && Number(e.goal_cell) === cell && e.zone === zone && (e.goalkeeper_id || null) === gid);
       if (!ev) { toast(t('gk.nothing')); return; }
       enqueue({ op: 'event.delete', id: ev.id, match_id: id });
-      gkCell = null; gkZone = null; vibrate(); toast(t('gk.removed')); render(); return;
+      gkCell = null; gkZone = null; gkFocus = null; vibrate(); toast(t('gk.removed')); render(); return;
     }
     const fields = { goalkeeper_id: gid, goal_cell: cell, zone, ...(zone === '7M' ? { phase: 'penalti' } : {}) };
     const cov = keeperCoverage(events(), data.adjustments, type);
-    const done = (msg) => { gkCell = null; gkZone = null; vibrate(); toast(msg, 'ok', { label: t('undo.short'), run: undo }); render(); };
+    const done = (msg) => { gkCell = null; gkZone = null; gkFocus = null; vibrate(); toast(msg, 'ok', { label: t('undo.short'), run: undo }); render(); };
     if (cov.pending > 0) { // ya estaba anotada en la vista simple: se completa, no se duplica
       const pend = events().find((e) => isPending(e) && e.type === type);
       enqueue({ op: 'event.update', id: pend.id, match_id: id, fields });
@@ -222,14 +222,14 @@ export async function matchView(root, { id }) {
 
   // Vista rápida (en cualquier pestaña): el mismo mapa enlazado, solo lectura de filtros
   function openKeeperMap() {
-    let who = selKeeper && selKeeper !== NONE ? selKeeper : 'all', cell = null, zone = null;
+    let who = selKeeper && selKeeper !== NONE ? selKeeper : 'all', cell = null, zone = null, focus = null;
     const body = h('div', { class: 'stack' });
     const s = sheet({ title: `🧤 ${t('gk.map')}`, body, full: true });
     const paint = () => body.replaceChildren(
       h('div', { class: 'chips people' },
         h('button', { type: 'button', class: `chip${who === 'all' ? ' on' : ''}`, onclick: () => { who = 'all'; paint(); } }, t('gk.all')),
         goalkeepers.map((p) => h('button', { type: 'button', class: `chip${who === p.id ? ' on' : ''}`, onclick: () => { who = p.id; paint(); } }, h('b', null, p.number ?? '·'), ' ', p.name))),
-      keeperMap({ events: events(), mine: keeperMine(who), cell, zone, onCell: (c) => { cell = cell === c ? null : c; paint(); }, onZone: (z) => { zone = zone === z ? null : z; paint(); } }),
+      keeperMap({ events: events(), mine: keeperMine(who), cell, zone, focus, onCell: (c) => { cell = cell === c ? null : c; focus = 'cell'; paint(); }, onZone: (z) => { zone = zone === z ? null : z; focus = 'zone'; paint(); } }),
       h('p', { class: 'muted small center' }, t('gk.map_hint')));
     paint();
   }
@@ -316,14 +316,14 @@ export async function matchView(root, { id }) {
       return [
         h('h2', { class: 'grp' }, t('adv.keeper')),
         goalkeepers.length ? chipsFor(goalkeepers, selKeeper, (v) => { selKeeper = v; }, `urd.gk.${id}`, null) : h('p', { class: 'muted small' }, t('shot.no_keepers_hint')),
-        keeperMap({ events: events(), mine: keeperMine(sel ? sel : goalkeepers.length ? NONE : 'all'), cell: gkCell, zone: gkZone,
-          onCell: (c) => { gkCell = gkCell === c ? null : c; render(); }, onZone: (z) => { gkZone = gkZone === z ? null : z; render(); } }),
+        keeperMap({ events: events(), mine: keeperMine(sel ? sel : goalkeepers.length ? NONE : 'all'), cell: gkCell, zone: gkZone, focus: gkFocus,
+          onCell: (c) => { gkCell = gkCell === c ? null : c; gkFocus = 'cell'; render(); }, onZone: (z) => { gkZone = gkZone === z ? null : z; gkFocus = 'zone'; render(); } }),
         h('div', { class: 'gk-dock' },
           h('p', { class: 'gk-steps', 'aria-live': 'polite' }, h('span', { class: ready ? 'ok' : '' }, step)),
           ready ? h('div', { class: 'gk-actions' }, act('save', '🧤'), act('goal_against', '⚽')) : null),
         h('div', { class: 'chips gk-modes' },
           chip(gkRemove, `− ${t('gk.remove')}`, () => { gkRemove = !gkRemove; render(); }),
-          gkCell != null || gkZone ? chip(false, t('gk.clear'), () => { gkCell = null; gkZone = null; render(); }) : null),
+          gkCell != null || gkZone ? chip(false, t('gk.clear'), () => { gkCell = null; gkZone = null; gkFocus = null; render(); }) : null),
         h('div', { class: 'gk-cover muted small' }, covLine('save'), covLine('goal_against')),
         h('h3', { class: 'sub' }, t('gk.others')),
         h('div', { class: 'acts' }, [GK_BTNS[2], GK_BTNS[3], GK_BTNS[4], PEN_BTNS[2]].map((d) => ab(d, 'keeper'))),

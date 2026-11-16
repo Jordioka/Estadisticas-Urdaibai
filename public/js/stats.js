@@ -310,7 +310,10 @@ const sg = () => ({ s: 0, g: 0 });
 export const effClass = (x) => { const n = x.s + x.g; if (!n) return ''; const p = x.s / n; return p >= 0.35 ? 'good' : p < 0.2 ? 'bad' : 'mid'; };
 
 // mine(e): ¿cuenta este evento? (portero elegido o todos)
-export function keeperAgg(events, mine, { cell = null, zone = null } = {}) {
+// focus: cuál de los dos filtros manda cuando hay cuadrado y zona a la vez ('cell' | 'zone'); sin focus se cruzan los dos.
+export function keeperAgg(events, mine, { cell = null, zone = null, focus = null } = {}) {
+  if (cell && zone && focus === 'cell') zone = null;
+  else if (cell && zone && focus === 'zone') cell = null;
   const cells = {}, zones = {}, tot = sg();
   for (const c of GOAL_CELLS) cells[c] = sg();
   for (const z of ZONES) zones[z] = sg();

@@ -122,3 +122,14 @@ test('Mapa enlazado: al elegir zona los cuadrados filtran, y al elegir cuadrado 
   assert.deepEqual(c.zones['6C'], { s: 1, g: 0 }); assert.deepEqual(c.zones.EI, { s: 0, g: 0 });
   assert.equal(effClass({ s: 3, g: 1 }), 'good'); assert.equal(effClass({ s: 0, g: 2 }), 'bad'); assert.equal(effClass({ s: 0, g: 0 }), '');
 });
+
+test('Mapa enlazado: con cuadrado y zona a la vez, manda el último que se tocó', async () => {
+  const { keeperAgg } = await import('../public/js/stats.js');
+  const e = (type, zone, goal_cell) => ({ type, zone, goal_cell, deleted_at: null });
+  const evs = [e('save', '9C', 6), e('goal_against', '6C', 6), e('save', '7M', 1)];
+  const m = () => true;
+  const byCell = keeperAgg(evs, m, { cell: 6, zone: '7M', focus: 'cell' }); // el cuadrado 6 manda: las zonas enseñan sus datos y el cuadrado no queda vacío
+  assert.deepEqual(byCell.zones['9C'], { s: 1, g: 0 }); assert.deepEqual(byCell.cells[6], { s: 1, g: 1 }); assert.deepEqual(byCell.tot, { s: 1, g: 1 });
+  const byZone = keeperAgg(evs, m, { cell: 6, zone: '7M', focus: 'zone' });
+  assert.deepEqual(byZone.cells[1], { s: 1, g: 0 }); assert.deepEqual(byZone.zones['9C'], { s: 1, g: 0 });
+});
