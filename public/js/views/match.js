@@ -6,6 +6,7 @@ import { keepAwake } from '../prefs.js';
 import { totalCounters, eventsToCounters, isPending, keeperCoverage, GOAL_CELLS, SHOT_TYPES_ALL, LOSS_KINDS, REC_KINDS } from '../stats.js';
 import { countersGrid, warningsBox, segmented, errMsg } from '../ui.js';
 import { openDetailSheet } from '../shot-sheet.js';
+import { courtSVG } from '../court.js';
 
 const lsGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* nada */ } };
@@ -77,7 +78,7 @@ export async function matchView(root, { id }) {
   let selPlayer = valid(lsGet(`urd.pl.${id}`, null), teamPlayers);
   let selKeeper = valid(lsGet(`urd.gk.${id}`, null), goalkeepers) || (goalkeepers.length === 1 ? goalkeepers[0].id : null);
   let goalDetail = lsGet('urd.gd', '1') === '1'; // pedir el punto de la portería al anotar
-  let gkMode = 'save', gkPen = false, gkRemove = false, gkAddAll = false; // pestaña Portería
+  let gkMode = 'save', gkPen = false, gkRemove = false, gkAddAll = false, gkZone = null; // pestaña Portería
 
   const screen = h('div', { class: 'page match' });
   root.append(screen);
@@ -190,14 +191,17 @@ export async function matchView(root, { id }) {
     if (goalkeepers.length && selKeeper == null) { toast(t('adv.pick_keeper')); return; }
     const gid = selKeeper && selKeeper !== NONE ? selKeeper : null;
     if (gkRemove) {
-      const ev = [...events()].reverse().find((e) => e.type === type && Number(e.goal_cell) === cell && (e.goalkeeper_id || null) === gid && (e.phase === 'penalti') === gkPen);
+      const ev = [...events()].reverse().find((e) => e.type === type && (cell == null ? !e.goal_cell : Number(e.goal_cell) === cell) && (e.goalkeeper_id || null) === gid && (e.phase === 'penalti') === gkPen);
       if (!ev) { toast(t('gk.nothing')); return; }
       enqueue({ op: 'event.delete', id: ev.id, match_id: id });
       vibrate(); toast(t('gk.removed')); render(); return;
     }
-    const fields = { goalkeeper_id: gid, goal_cell: cell, ...(gkPen ? { phase: 'penalti', zone: '7M' } : {}) };
+    // de dónde (zona del campo, opcional) y hacia dónde (cuadrado de la portería, opcional)
+    const zoneUsed = gkPen ? '7M' : gkZone;
+    const fields = { goalkeeper_id: gid, goal_cell: cell, zone: zoneUsed, ...(zoneUsed === '7M' ? { phase: 'penalti' } : {}) };
+    if (cell == null && !fields.zone) { toast(t('gk.need_one')); return; }
     const cov = keeperCoverage(events(), data.adjustments, type);
-    const done = (msg) => { vibrate(); toast(msg, 'ok', { label: t('undo.short'), run: undo }); render(); };
+    const done = (msg) => { gkZone = null; vibrate(); toast(msg, 'ok', { label: t('undo.short'), run: undo }); render(); }; // la zona se borra tras cada lanzamiento
     if (cov.pending > 0) { // ya estaba anotada en la vista simple: se completa, no se duplica
       const pend = events().find((e) => isPending(e) && e.type === type);
       enqueue({ op: 'event.update', id: pend.id, match_id: id, fields });
@@ -303,10 +307,15 @@ export async function matchView(root, { id }) {
           chip(gkMode === 'goal_against', `⚽ ${t('ev.goal_against')}`, () => { gkMode = 'goal_against'; render(); }),
           chip(gkPen, t('gk.pen'), () => { gkPen = !gkPen; render(); }),
           chip(gkRemove, `− ${t('gk.remove')}`, () => { gkRemove = !gkRemove; render(); })),
+        gkPen ? h('p', { class: 'zone-pick on' }, t('zone.7M'))
+          : h('div', { class: 'gk-court' }, h('h3', { class: 'sub' }, `1 · ${t('gk.from')}`), courtSVG({ selected: gkZone, onSelect: (z) => { gkZone = gkZone === z ? null : z; render(); } }),
+            h('p', { class: `zone-pick${gkZone ? ' on' : ''}`, 'aria-live': 'polite' }, gkZone ? t(`zone.${gkZone}`) : t('gk.zone_none'))),
+        h('h3', { class: 'sub' }, `${gkPen ? '' : '2 · '}${t('gk.to')}`),
         h('div', { class: `gk-goal${gkRemove ? ' removing' : ''}${gkMode === 'goal_against' ? ' goals' : ''}`, role: 'group', 'aria-label': t('shot.goal') },
           GOAL_CELLS.map((cell) => { const s1 = n(cell, 'save'), g1 = n(cell, 'goal_against');
             return h('button', { type: 'button', class: 'gk-cell', 'aria-label': `${cell}: ${s1} ${t('ev.save')}, ${g1} ${t('ev.goal_against')}`, onclick: () => cellTap(cell) },
               h('span', { class: 'gk-s' }, s1 ? `🧤${s1}` : ''), h('span', { class: 'gk-g' }, g1 ? `⚽${g1}` : '')); })),
+        h('button', { type: 'button', class: 'btn small gk-nocell', onclick: () => cellTap(null) }, t('gk.no_cell')),
         h('div', { class: 'gk-cover muted small' }, covLine('save'), covLine('goal_against')),
         h('h3', { class: 'sub' }, t('gk.others')),
         h('div', { class: 'acts' }, [GK_BTNS[2], GK_BTNS[3], GK_BTNS[4], PEN_BTNS[2]].map((d) => ab(d, 'keeper'))),

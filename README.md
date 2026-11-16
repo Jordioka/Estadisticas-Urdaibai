@@ -135,3 +135,8 @@ Si lo haces al revés, la web puede dar error hasta que se aplique la migración
 - La pantalla de anotar tiene tres pestañas: **Simple · Más detalle · Portería**. En Portería se elige portero y se toca el cuadrado de la portería (3×3) para cada parada o gol en contra (con opción de penalti 7 m y de quitar).
 - Si el partido ya tenía totales (Excel simple, vista simple), el detalle **no se suma otra vez**: se guarda como «solo detalle». Las paradas/goles anotados en la vista simple sin portero se completan en vez de duplicarse.
 - Si el detalle supera los totales del partido, pregunta si se quiere sumar la diferencia al total.
+
+## v15 — Portería con zona y cuadrado, e importación por Excel
+- Pestaña **Portería**: ahora se anota *desde dónde* tiran (campo, zona; 7M = penalti) y *hacia dónde* (cuadrado 1-9), o solo la zona («Anotar sin cuadrado»).
+- **Importar → Portería (zona × cuadrado)**: Excel con una hoja por partido y portero, con cuadrículas PARADAS y GOLES (filas = zona, columnas = cuadrado). El partido debe existir. Nunca suma a los totales: completa paradas/goles sin portero y guarda el resto como detalle; si hay más de lo que dicen los totales, pregunta si se omite (recomendado) o se añade también al total.
+- Requiere las migraciones 0004 y 0005 (`npx wrangler d1 migrations apply urdaibai-stats --remote`) antes de desplegar.

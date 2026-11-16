@@ -62,3 +62,49 @@ test('API: guardar detalle no cambia el marcador; al cambiar de tipo deja de ser
   assert.equal(det2.events.find((e) => e.id === e1).detail_only, 0);
   assert.equal(totalCounters(det2.events, det2.adjustments).saves, 5);
 });
+
+test('Importar detalle de portería: no duplica totales, completa pendientes, avisa del exceso', async () => {
+  const s = await scenario();
+  const sync = async (ops) => (await s.admin('POST', '/api/sync', { ops })).data.results;
+  await sync([{ op: 'rival.create', id: s.newId('r'), name: 'Loyola' }]);
+  const rival = (await s.admin('GET', '/api/bootstrap')).data.rivals[0].id;
+  const k = s.newId('p'), m = s.newId('m');
+  await sync([
+    { op: 'player.create', id: k, team_id: s.A.id, name: 'Malen', surname: 'Etxe', number: 1, is_goalkeeper: true },
+    { op: 'match.create', id: m, team_id: s.A.id, rival_id: rival, date: '2026-11-07' },
+    { op: 'adj.set', match_id: m, stat: 'saves', delta: 2 }, { op: 'adj.set', match_id: m, stat: 'goals_against', delta: 2 },
+    { op: 'adj.set', match_id: m, stat: 'shots_against', delta: 5 },
+    { op: 'event.create', id: s.newId('ev'), match_id: m, type: 'save' }, // pendiente (sin portero)
+  ]);
+  const base = { Equipo: s.A.name, Fecha: '2026-11-07', Rival: 'Loyola', Portero: '1' };
+  const rows = [
+    { ...base, Tipo: 'Parada', Zona: '9C', 'Punto portería': 5, Cantidad: 2 },
+    { ...base, Tipo: 'Parada', Zona: '7M', 'Punto portería': 1, Cantidad: 2 }, // 1 sobra
+    { ...base, Tipo: 'Gol', Zona: 'EI', 'Punto portería': 9, Cantidad: 1 },
+  ];
+  const dry = (await s.admin('POST', '/api/import/keeper-detail', { rows, dry_run: true })).data;
+  assert.equal(dry.errors.length, 0, JSON.stringify(dry.errors));
+  assert.equal(dry.has_excess, true);
+  assert.equal(dry.matches[0].types.save.over, 1);
+  const go = (await s.admin('POST', '/api/import/keeper-detail', { rows, dry_run: false })).data;
+  assert.equal(go.committed, true);
+  const det = (await s.admin('GET', `/api/matches/${m}`)).data;
+  const c = totalCounters(det.events, det.adjustments);
+  assert.equal(c.saves, 3); assert.equal(c.goals_against, 2); // totales intactos
+  const saves = det.events.filter((e) => e.type === 'save');
+  assert.equal(saves.length, 3);
+  assert.ok(saves.every((e) => e.goalkeeper_id === k));
+  assert.equal(saves.filter((e) => e.phase === 'penalti').length, 1);
+  assert.equal(det.events.filter((e) => e.detail_only).length, 3 - 1 + 1); // 2 paradas detalle + 1 gol
+  // partido inexistente → error claro
+  const bad = (await s.admin('POST', '/api/import/keeper-detail', { rows: [{ ...base, Rival: 'Nadie', Tipo: 'Parada', Zona: '9C', Cantidad: 1 }] })).data;
+  assert.equal(bad.errors[0].error, 'match_not_found');
+});
+
+test('Plantilla en cuadrícula: zona × cuadrado quedan asociados al convertir a filas', async () => {
+  const { parseKeeperSheet, keeperTemplate } = await import('../public/js/keeper-grid.js');
+  const sheet = keeperTemplate('Urdaibai')[0].aoa;
+  const rows = parseKeeperSheet(sheet);
+  assert.deepEqual(rows.map((r) => [r.Tipo, r.Zona, r['Punto portería'], r.Cantidad]), [['Parada', '7M', 1, 1], ['Parada', '9C', 5, 2], ['Gol', 'EI', 9, 1]]);
+  assert.equal(rows[0].Equipo, 'Urdaibai'); assert.equal(rows[0].Portero, 1); assert.equal(rows[0].Rival, 'Rival de ejemplo');
+});

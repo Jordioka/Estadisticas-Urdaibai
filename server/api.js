@@ -5,7 +5,7 @@ import {
   loadAccess, canTeam, accessibleTeams, audit, requireAdmin, requireOwner, ensureSeason, validId,
 } from './core.js';
 import { applyOps } from './ops.js';
-import { importPlayers, importMatches } from './imports.js';
+import { importPlayers, importMatches, importKeeperDetail } from './imports.js';
 import { buildReport, loadMatchDetail } from './reports.js';
 
 const SESSION_DAYS = 60;
@@ -162,6 +162,7 @@ route('GET', '/api/reports', async (ctx) => json(await buildReport(ctx, Object.f
 
 route('POST', '/api/import/players', async (ctx) => json(await importPlayers(ctx, ctx.body)));
 route('POST', '/api/import/matches', async (ctx) => json(await importMatches(ctx, ctx.body)));
+route('POST', '/api/import/keeper-detail', async (ctx) => json(await importKeeperDetail(ctx, ctx.body)));
 
 // ----- Administración -----
 const userOut = async (db, u) => ({
