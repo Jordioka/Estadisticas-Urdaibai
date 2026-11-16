@@ -76,13 +76,18 @@ export function courtSVG(opts = {}) {
     seven.addEventListener('click', () => opts.onSelect('7M'));
     seven.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); opts.onSelect('7M'); } });
   }
-  root.append(seven, sevenSub, texts);
+  const ov = svg('g', { 'pointer-events': 'none' }); // resalte de la zona elegida, encima de los colores
+  root.append(seven, sevenSub, ov, texts);
 
   const wrap = h('div', { class: 'court-wrap' }, root);
-  const update = ({ selected, counts, heat } = {}) => {
+  const update = ({ selected, counts, heat, eff, pick } = {}) => {
+    ov.replaceChildren();
     for (const [z, { p, sub }] of Object.entries(zones)) {
+      if (pick === z) { const c = p.cloneNode(); c.removeAttribute('data-zone'); c.removeAttribute('role'); c.removeAttribute('tabindex'); c.removeAttribute('style'); c.setAttribute('class', 'zone-ov'); ov.append(c); }
       p.classList.toggle('selected', selected === z);
-      p.setAttribute('aria-pressed', selected === z ? 'true' : 'false');
+      p.setAttribute('aria-pressed', selected === z || pick === z ? 'true' : 'false');
+      p.classList.toggle('pick', pick === z);
+      if (eff) p.setAttribute('data-eff', eff[z] || ''); else p.removeAttribute('data-eff');
       sub.textContent = counts && counts[z] != null && counts[z] !== '' ? counts[z] : '';
       const v = heat?.[z] ?? 0;
       p.style.fillOpacity = heat ? String(0.12 + 0.75 * v) : '';
