@@ -7,6 +7,7 @@ import { totalCounters, eventsToCounters, isPending, keeperCoverage, GOAL_CELLS,
 import { countersGrid, warningsBox, segmented, errMsg } from '../ui.js';
 import { openDetailSheet } from '../shot-sheet.js';
 import { keeperMap, keeperPanel } from '../keeper-map.js';
+import { createClock, fmt as fmtClock } from '../clock.js';
 
 const lsGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* nada */ } };
@@ -55,8 +56,12 @@ function matchesBtn(e, d) {
 const NONE = 'none'; // "Sin jugador"
 
 // Convierte en eventos una acción de equipo (vista simple)
+const clocks = new Map(); // cronómetro de cada partido abierto: cada botón pulsado se asocia a su minuto
 export function addEventOp(matchId, type, extra = {}, part = null) {
-  const op = { op: 'event.create', id: uid('ev'), match_id: matchId, type, part, ts: new Date().toISOString(), ...extra };
+  const st = clocks.get(matchId)?.stamp() || null;
+  const op = { op: 'event.create', id: uid('ev'), match_id: matchId, type, part: st ? st.part : part, minute: st ? st.minute : null, ts: new Date().toISOString(), ...extra };
+  if (extra.minute == null) op.minute = st ? st.minute : null; // el detalle puede traer minute:null y no debe borrar el del reloj
+  if (extra.part == null) op.part = st ? st.part : part;
   enqueue(op);
   return op;
 }
@@ -83,10 +88,50 @@ export async function matchView(root, { id }) {
   const screen = h('div', { class: 'page match' });
   root.append(screen);
   const release = keepAwake(); // la pantalla no se apaga mientras se anota
-  const onHash = () => { if (location.hash !== `#/match/${id}`) { release(); window.removeEventListener('hashchange', onHash); } };
+  const onHash = () => { if (location.hash !== `#/match/${id}`) { release(); clearInterval(clockTimer); clocks.delete(id); window.removeEventListener('hashchange', onHash); } };
   window.addEventListener('hashchange', onHash);
 
   const events = () => data.events;
+
+  // ---- Cronómetro (arriba del todo): parar / reanudar; los eventos guardan su minuto y parte ----
+  const clock = createClock(id); clocks.set(id, clock);
+  const timeEl = h('button', { type: 'button', class: 'clock-time', 'aria-label': t('clock.edit'), onclick: () => editClock() });
+  const playBtn = h('button', { type: 'button', class: 'btn primary clock-btn', onclick: () => { clock.toggle(); vibrate(); paintClock(); if (clock.used()) syncPart(true); } });
+  const clockBar = h('div', { class: 'clockbar' }, timeEl, playBtn);
+  let lastDerived = clock.used() ? clock.part() : null;
+  const STEP = { start: 'clock.start', half2: 'clock.half2', ot: 'clock.ot', resume: 'clock.resume' };
+  function paintClock() {
+    const e = clock.elapsed();
+    timeEl.textContent = fmtClock(e);
+    timeEl.classList.toggle('ot', e > 3600);
+    timeEl.classList.toggle('run', clock.running());
+    const step = clock.nextStep();
+    playBtn.textContent = step ? `▶ ${t(STEP[step])}` : `⏸ ${t('clock.pause')}`;
+    playBtn.classList.toggle('on', !step);
+  }
+  // La parte (1ª/2ª) sigue al reloj; se puede corregir a mano y no se pisa hasta que el reloj cambie de parte
+  function syncPart(force) {
+    if (!clock.used()) return;
+    const p = clock.part();
+    if (force || p !== lastDerived) { lastDerived = p; if (part !== p) { part = p; lsSet(`urd.part.${id}`, String(p)); render(); } }
+  }
+  const clockTimer = setInterval(() => {
+    const hit = clock.tick();
+    paintClock();
+    if (hit != null) { vibrate(200); toast(t(hit === 1800 ? 'clock.end_half' : hit === 3600 ? 'clock.end_full' : 'clock.end_ot')); }
+    syncPart(false);
+  }, 250);
+  function editClock() {
+    const e = Math.round(clock.elapsed());
+    const mm = h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 90, value: Math.floor(e / 60) });
+    const ss = h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 59, value: e % 60 });
+    const s = sheet({ title: t('clock.edit'), body: h('div', { class: 'stack' },
+      h('div', { class: 'btn-row' }, h('label', { class: 'field' }, h('span', { class: 'field-l' }, t('clock.min')), mm), h('label', { class: 'field' }, h('span', { class: 'field-l' }, t('clock.sec')), ss)),
+      h('div', { class: 'btn-row' },
+        h('button', { class: 'btn danger', type: 'button', onclick: async () => { s.close(); if (await confirmDialog(t('clock.reset_q'), { yes: t('clock.reset'), no: t('cancel'), danger: true })) { clock.reset(); lastDerived = null; paintClock(); } } }, t('clock.reset')),
+        h('button', { class: 'btn primary', type: 'button', onclick: () => { clock.set((Number(mm.value) || 0) * 60 + Math.min(59, Number(ss.value) || 0)); lastDerived = clock.part(); s.close(); paintClock(); syncPart(true); } }, t('save')))) });
+  }
+  paintClock();
   const counters = () => totalCounters(events(), data.adjustments);
 
   async function tap(type, extra = {}) {
@@ -345,6 +390,7 @@ export async function matchView(root, { id }) {
 
     const buttons = buildButtons();
     screen.replaceChildren(
+      clockBar,
       h('div', { class: 'subbar' },
         h('a', { class: 'icon-btn', href: '#/', 'aria-label': t('back') }, '←'),
         h('div', { class: 'title-block' }, h('h1', null, `${m.home_away === 'away' ? '@ ' : ''}${rival}`), h('span', { class: 'muted small' }, `${fmtDate(m.date)}${m.is_practice ? ' · ' + t('practice') : ''}`)),

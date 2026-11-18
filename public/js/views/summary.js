@@ -146,7 +146,7 @@ export async function summaryView(root, { id }) {
       h('h2', null, t('events.title', { n: ev.length }), pend ? h('span', { class: 'badge' }, t('pending.badge', { n: pend })) : null),
       ev.length ? h('div', { class: 'ev-list' }, [...ev].reverse().slice(0, showAll ? ev.length : 3).map((e) =>
         h('button', { type: 'button', class: `ev-row${isPending(e) ? ' pending' : ''}`, onclick: () => editEvent(e) },
-          h('span', { class: 'ev-time' }, hhmm(e.created_at), e.part ? ` · ${e.part}ª` : ''),
+          h('span', { class: 'ev-time' }, e.minute != null ? `${e.minute}'` : hhmm(e.created_at), e.part ? ` · ${e.part}ª` : ''),
           h('span', { class: 'ev-type' }, t(`ev.${e.type}`)),
           h('span', { class: 'ev-desc muted small' }, isPending(e) ? t('pending.badge1') : describe(e)),
           h('span', { class: 'chev' }, '›')))) : h('p', { class: 'muted' }, t('events.none')),
