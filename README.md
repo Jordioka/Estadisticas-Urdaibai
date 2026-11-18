@@ -149,3 +149,7 @@ Si lo haces al revés, la web puede dar error hasta que se aplique la migración
 ## v20
 - Al anotar (pestaña Portería) el mapa muestra siempre todos los datos; el cuadrado y la zona elegidos solo se resaltan (ámbar).
 - Resumen del partido: nuevo «Mapa de portería» (también en el botón rápido): se elige UNA cosa, un cuadrado o una zona, y el otro mapa se filtra con eso.
+
+## v23 — Cronómetro del partido
+- Barra fija arriba del todo en la pantalla de anotar: tiempo 00:00 → 60:00, botón Empezar / Parar / Reanudar. Se para solo en 30:00 (descanso → «2ª parte»), en 60:00 (fin) y se amplía con «Prórroga +5'» las veces que haga falta. Tocar el tiempo permite ajustarlo o reiniciarlo.
+- Cada botón pulsado (simple, más detalle y portería) guarda el minuto y la parte (1ª/2ª) del reloj. Se ve en el resumen. Sin migración (el campo `minute` ya existía). El estado del reloj sobrevive a recargas.

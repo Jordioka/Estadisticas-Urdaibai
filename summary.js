@@ -10,6 +10,7 @@ import { countersGrid, percentBlock, warningsBox, pill, segmented, field, backBa
 import { openDetailSheet, openPlayerPick } from '../shot-sheet.js';
 import { playersTable, keepersTable, mapsBlock } from './tables.js';
 import { shareMatch, topScorers } from '../share.js';
+import { keeperPanel } from '../keeper-map.js';
 
 const hhmm = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
@@ -145,13 +146,14 @@ export async function summaryView(root, { id }) {
       h('h2', null, t('events.title', { n: ev.length }), pend ? h('span', { class: 'badge' }, t('pending.badge', { n: pend })) : null),
       ev.length ? h('div', { class: 'ev-list' }, [...ev].reverse().slice(0, showAll ? ev.length : 3).map((e) =>
         h('button', { type: 'button', class: `ev-row${isPending(e) ? ' pending' : ''}`, onclick: () => editEvent(e) },
-          h('span', { class: 'ev-time' }, hhmm(e.created_at), e.part ? ` · ${e.part}ª` : ''),
+          h('span', { class: 'ev-time' }, e.minute != null ? `${e.minute}'` : hhmm(e.created_at), e.part ? ` · ${e.part}ª` : ''),
           h('span', { class: 'ev-type' }, t(`ev.${e.type}`)),
           h('span', { class: 'ev-desc muted small' }, isPending(e) ? t('pending.badge1') : describe(e)),
           h('span', { class: 'chev' }, '›')))) : h('p', { class: 'muted' }, t('events.none')),
       ev.length > 3 ? h('button', { class: 'btn', type: 'button', onclick: () => { showAll = !showAll; render(); } }, showAll ? t('events.less') : t('events.all', { n: ev.length })) : null,
       playersTable({ rows: playerStats(ev).filter((r) => r.player_id), unassigned: unassignedPlayers(c, playerStats(ev)) }, nameOf),
       keepersTable({ rows: goalkeeperStats(ev).filter((r) => r.player_id), unassigned: unassignedGoalkeepers(c, goalkeeperStats(ev)) }, nameOf),
+      ev.some((e) => ['save', 'goal_against'].includes(e.type) && (e.zone || e.goal_cell)) ? [h('h2', null, `🧤 ${t('gk.map')}`), keeperPanel({ events: ev, keepers: goalkeepers })] : null,
       h('h2', null, t('maps.title')), mapsBlock(zoneStats(ev), cellStats(ev), ev.some((e) => e.zone || e.goal_cell)));
   }
   render();

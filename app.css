@@ -261,7 +261,7 @@ a.player-card { cursor: pointer; }
 :root[data-theme='dark'] .btn.danger { color: #FF8F89; } :root[data-theme='dark'] .area6 { fill: #2A3238; }
 
 /* ---------- mejoras de uso ---------- */
-.match .scorebar { position: sticky; top: 0; z-index: 12; background: var(--bg); padding: 6px 0; margin: 0 0 6px; border-bottom: 1px solid var(--line-soft); }
+.match .scorebar { position: sticky; top: var(--clock-h, 58px); z-index: 12; background: var(--bg); padding: 6px 0; margin: 0 0 6px; border-bottom: 1px solid var(--line-soft); }
 .grp-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; } .grp-row .grp { margin-top: 12px; }
 .squad-list { display: grid; gap: 4px; margin: 10px 0; } .squad-row { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 4px 8px; border: 1px solid var(--line-soft); border-radius: 10px; }
 .toast.has-action { display: flex; align-items: center; gap: 12px; padding-right: 8px; }
@@ -321,3 +321,9 @@ a.player-card { cursor: pointer; }
 .gk-map .gk-court { max-width: 330px; margin: 2px auto 0; }
 .gk-dock { padding: 4px 8px; } .gk-dock .gk-steps { font-size: .95rem; margin: 2px 0; min-height: 0; } .gk-dock .gk-actions .act { min-height: 56px; } .gk-dock .gk-actions { gap: 8px; margin: 4px 0; }
 .gk-eff { margin: 4px 0; font-size: .95rem; }
+
+/* cronómetro del partido: encima de todo y siempre visible */
+.clockbar { position: sticky; top: 0; z-index: 14; display: flex; align-items: center; justify-content: space-between; gap: 10px; height: var(--clock-h, 58px); padding: 6px 0; background: var(--bg); border-bottom: 1px solid var(--line-soft); }
+.clock-time { font-size: 2.1rem; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .02em; background: none; border: 0; padding: 0 4px; color: var(--ink); cursor: pointer; }
+.clock-time.run { color: var(--strong); } .clock-time.ot { color: #E8140C; }
+.clock-btn { min-height: 44px; padding: 0 16px; font-weight: 700; } .clock-btn.on { background: var(--ink); color: var(--bg); }

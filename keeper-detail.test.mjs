@@ -133,3 +133,21 @@ test('Mapa enlazado: con cuadrado y zona a la vez, manda el último que se tocó
   const byZone = keeperAgg(evs, m, { cell: 6, zone: '7M', focus: 'zone' });
   assert.deepEqual(byZone.cells[1], { s: 1, g: 0 }); assert.deepEqual(byZone.zones['9C'], { s: 1, g: 0 });
 });
+
+test('Cronómetro: para en 30:00 y 60:00, se amplía con prórrogas, se puede parar/reanudar y sella minuto y parte', async () => {
+  const { createClock, limitFor } = await import('../public/js/clock.js');
+  let t0 = 1_000_000; const mem = {}; const store = { getItem: (k) => mem[k] ?? null, setItem: (k, v) => { mem[k] = v; } };
+  const c = createClock('m1', store, () => t0);
+  assert.equal(c.stamp(), null); assert.equal(c.nextStep(), 'start');
+  c.start(); t0 += 125_000; // 2:05
+  assert.deepEqual(c.stamp(), { part: 1, minute: 2 });
+  c.pause(); t0 += 600_000; assert.equal(Math.round(c.elapsed()), 125); // parado: no avanza
+  c.start(); t0 += 1_700_000; // pasa de 30:00
+  assert.equal(c.tick(), 1800); assert.equal(c.running(), false); assert.equal(Math.round(c.elapsed()), 1800); assert.equal(c.nextStep(), 'half2');
+  c.start(); t0 += 100_000; assert.deepEqual(c.stamp(), { part: 2, minute: 31 });
+  c.set(3599); c.pause(); c.start(); t0 += 5_000; assert.equal(c.tick(), 3600); assert.equal(c.nextStep(), 'ot');
+  c.start(); t0 += 400_000; assert.equal(c.tick(), 3900); // prórroga de 5 minutos
+  assert.equal(limitFor(3900), 4200);
+  // sobrevive a una recarga
+  const c2 = createClock('m1', store, () => t0); assert.equal(Math.round(c2.elapsed()), 3900);
+});

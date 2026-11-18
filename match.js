@@ -6,7 +6,8 @@ import { keepAwake } from '../prefs.js';
 import { totalCounters, eventsToCounters, isPending, keeperCoverage, GOAL_CELLS, SHOT_TYPES_ALL, LOSS_KINDS, REC_KINDS } from '../stats.js';
 import { countersGrid, warningsBox, segmented, errMsg } from '../ui.js';
 import { openDetailSheet } from '../shot-sheet.js';
-import { keeperMap } from '../keeper-map.js';
+import { keeperMap, keeperPanel } from '../keeper-map.js';
+import { createClock, fmt as fmtClock } from '../clock.js';
 
 const lsGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* nada */ } };
@@ -55,8 +56,12 @@ function matchesBtn(e, d) {
 const NONE = 'none'; // "Sin jugador"
 
 // Convierte en eventos una acción de equipo (vista simple)
+const clocks = new Map(); // cronómetro de cada partido abierto: cada botón pulsado se asocia a su minuto
 export function addEventOp(matchId, type, extra = {}, part = null) {
-  const op = { op: 'event.create', id: uid('ev'), match_id: matchId, type, part, ts: new Date().toISOString(), ...extra };
+  const st = clocks.get(matchId)?.stamp() || null;
+  const op = { op: 'event.create', id: uid('ev'), match_id: matchId, type, part: st ? st.part : part, minute: st ? st.minute : null, ts: new Date().toISOString(), ...extra };
+  if (extra.minute == null) op.minute = st ? st.minute : null; // el detalle puede traer minute:null y no debe borrar el del reloj
+  if (extra.part == null) op.part = st ? st.part : part;
   enqueue(op);
   return op;
 }
@@ -78,15 +83,55 @@ export async function matchView(root, { id }) {
   let selPlayer = valid(lsGet(`urd.pl.${id}`, null), teamPlayers);
   let selKeeper = valid(lsGet(`urd.gk.${id}`, null), goalkeepers) || (goalkeepers.length === 1 ? goalkeepers[0].id : null);
   let goalDetail = lsGet('urd.gd', '1') === '1'; // pedir el punto de la portería al anotar
-  let gkRemove = false, gkAddAll = false, gkZone = null, gkCell = null, gkFocus = null; // pestaña Portería: cuadrado y zona son obligatorios
+  let gkRemove = false, gkAddAll = false, gkZone = null, gkCell = null; // pestaña Portería: cuadrado y zona son obligatorios
 
   const screen = h('div', { class: 'page match' });
   root.append(screen);
   const release = keepAwake(); // la pantalla no se apaga mientras se anota
-  const onHash = () => { if (location.hash !== `#/match/${id}`) { release(); window.removeEventListener('hashchange', onHash); } };
+  const onHash = () => { if (location.hash !== `#/match/${id}`) { release(); clearInterval(clockTimer); clocks.delete(id); window.removeEventListener('hashchange', onHash); } };
   window.addEventListener('hashchange', onHash);
 
   const events = () => data.events;
+
+  // ---- Cronómetro (arriba del todo): parar / reanudar; los eventos guardan su minuto y parte ----
+  const clock = createClock(id); clocks.set(id, clock);
+  const timeEl = h('button', { type: 'button', class: 'clock-time', 'aria-label': t('clock.edit'), onclick: () => editClock() });
+  const playBtn = h('button', { type: 'button', class: 'btn primary clock-btn', onclick: () => { clock.toggle(); vibrate(); paintClock(); if (clock.used()) syncPart(true); } });
+  const clockBar = h('div', { class: 'clockbar' }, timeEl, playBtn);
+  let lastDerived = clock.used() ? clock.part() : null;
+  const STEP = { start: 'clock.start', half2: 'clock.half2', ot: 'clock.ot', resume: 'clock.resume' };
+  function paintClock() {
+    const e = clock.elapsed();
+    timeEl.textContent = fmtClock(e);
+    timeEl.classList.toggle('ot', e > 3600);
+    timeEl.classList.toggle('run', clock.running());
+    const step = clock.nextStep();
+    playBtn.textContent = step ? `▶ ${t(STEP[step])}` : `⏸ ${t('clock.pause')}`;
+    playBtn.classList.toggle('on', !step);
+  }
+  // La parte (1ª/2ª) sigue al reloj; se puede corregir a mano y no se pisa hasta que el reloj cambie de parte
+  function syncPart(force) {
+    if (!clock.used()) return;
+    const p = clock.part();
+    if (force || p !== lastDerived) { lastDerived = p; if (part !== p) { part = p; lsSet(`urd.part.${id}`, String(p)); render(); } }
+  }
+  const clockTimer = setInterval(() => {
+    const hit = clock.tick();
+    paintClock();
+    if (hit != null) { vibrate(200); toast(t(hit === 1800 ? 'clock.end_half' : hit === 3600 ? 'clock.end_full' : 'clock.end_ot')); }
+    syncPart(false);
+  }, 250);
+  function editClock() {
+    const e = Math.round(clock.elapsed());
+    const mm = h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 90, value: Math.floor(e / 60) });
+    const ss = h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 59, value: e % 60 });
+    const s = sheet({ title: t('clock.edit'), body: h('div', { class: 'stack' },
+      h('div', { class: 'btn-row' }, h('label', { class: 'field' }, h('span', { class: 'field-l' }, t('clock.min')), mm), h('label', { class: 'field' }, h('span', { class: 'field-l' }, t('clock.sec')), ss)),
+      h('div', { class: 'btn-row' },
+        h('button', { class: 'btn danger', type: 'button', onclick: async () => { s.close(); if (await confirmDialog(t('clock.reset_q'), { yes: t('clock.reset'), no: t('cancel'), danger: true })) { clock.reset(); lastDerived = null; paintClock(); } } }, t('clock.reset')),
+        h('button', { class: 'btn primary', type: 'button', onclick: () => { clock.set((Number(mm.value) || 0) * 60 + Math.min(59, Number(ss.value) || 0)); lastDerived = clock.part(); s.close(); paintClock(); syncPart(true); } }, t('save')))) });
+  }
+  paintClock();
   const counters = () => totalCounters(events(), data.adjustments);
 
   async function tap(type, extra = {}) {
@@ -196,11 +241,11 @@ export async function matchView(root, { id }) {
       const ev = [...events()].reverse().find((e) => e.type === type && Number(e.goal_cell) === cell && e.zone === zone && (e.goalkeeper_id || null) === gid);
       if (!ev) { toast(t('gk.nothing')); return; }
       enqueue({ op: 'event.delete', id: ev.id, match_id: id });
-      gkCell = null; gkZone = null; gkFocus = null; vibrate(); toast(t('gk.removed')); render(); return;
+      gkCell = null; gkZone = null; vibrate(); toast(t('gk.removed')); render(); return;
     }
     const fields = { goalkeeper_id: gid, goal_cell: cell, zone, ...(zone === '7M' ? { phase: 'penalti' } : {}) };
     const cov = keeperCoverage(events(), data.adjustments, type);
-    const done = (msg) => { gkCell = null; gkZone = null; gkFocus = null; vibrate(); toast(msg, 'ok', { label: t('undo.short'), run: undo }); render(); };
+    const done = (msg) => { gkCell = null; gkZone = null; vibrate(); toast(msg, 'ok', { label: t('undo.short'), run: undo }); render(); };
     if (cov.pending > 0) { // ya estaba anotada en la vista simple: se completa, no se duplica
       const pend = events().find((e) => isPending(e) && e.type === type);
       enqueue({ op: 'event.update', id: pend.id, match_id: id, fields });
@@ -220,18 +265,9 @@ export async function matchView(root, { id }) {
     done(t('noted', { what: t(`ev.${type}`) }));
   }
 
-  // Vista rápida (en cualquier pestaña): el mismo mapa enlazado, solo lectura de filtros
+  // Vista rápida (en cualquier pestaña): consulta; una sola selección (cuadrado o zona)
   function openKeeperMap() {
-    let who = selKeeper && selKeeper !== NONE ? selKeeper : 'all', cell = null, zone = null, focus = null;
-    const body = h('div', { class: 'stack' });
-    const s = sheet({ title: `🧤 ${t('gk.map')}`, body, full: true });
-    const paint = () => body.replaceChildren(
-      h('div', { class: 'chips people' },
-        h('button', { type: 'button', class: `chip${who === 'all' ? ' on' : ''}`, onclick: () => { who = 'all'; paint(); } }, t('gk.all')),
-        goalkeepers.map((p) => h('button', { type: 'button', class: `chip${who === p.id ? ' on' : ''}`, onclick: () => { who = p.id; paint(); } }, h('b', null, p.number ?? '·'), ' ', p.name))),
-      keeperMap({ events: events(), mine: keeperMine(who), cell, zone, focus, onCell: (c) => { cell = cell === c ? null : c; focus = 'cell'; paint(); }, onZone: (z) => { zone = zone === z ? null : z; focus = 'zone'; paint(); } }),
-      h('p', { class: 'muted small center' }, t('gk.map_hint')));
-    paint();
+    sheet({ title: `🧤 ${t('gk.map')}`, full: true, body: keeperPanel({ events: events(), keepers: goalkeepers, who: selKeeper && selKeeper !== NONE ? selKeeper : 'all' }) });
   }
 
   function completePending(ev) {
@@ -316,14 +352,14 @@ export async function matchView(root, { id }) {
       return [
         h('h2', { class: 'grp' }, t('adv.keeper')),
         goalkeepers.length ? chipsFor(goalkeepers, selKeeper, (v) => { selKeeper = v; }, `urd.gk.${id}`, null) : h('p', { class: 'muted small' }, t('shot.no_keepers_hint')),
-        keeperMap({ events: events(), mine: keeperMine(sel ? sel : goalkeepers.length ? NONE : 'all'), cell: gkCell, zone: gkZone, focus: gkFocus,
-          onCell: (c) => { gkCell = gkCell === c ? null : c; gkFocus = 'cell'; render(); }, onZone: (z) => { gkZone = gkZone === z ? null : z; gkFocus = 'zone'; render(); } }),
+        keeperMap({ events: events(), mine: keeperMine(sel ? sel : goalkeepers.length ? NONE : 'all'), cell: gkCell, zone: gkZone, filter: false,
+          onCell: (c) => { gkCell = gkCell === c ? null : c; render(); }, onZone: (z) => { gkZone = gkZone === z ? null : z; render(); } }),
         h('div', { class: 'gk-dock' },
           h('p', { class: 'gk-steps', 'aria-live': 'polite' }, h('span', { class: ready ? 'ok' : '' }, step)),
           ready ? h('div', { class: 'gk-actions' }, act('save', '🧤'), act('goal_against', '⚽')) : null),
         h('div', { class: 'chips gk-modes' },
           chip(gkRemove, `− ${t('gk.remove')}`, () => { gkRemove = !gkRemove; render(); }),
-          gkCell != null || gkZone ? chip(false, t('gk.clear'), () => { gkCell = null; gkZone = null; gkFocus = null; render(); }) : null),
+          gkCell != null || gkZone ? chip(false, t('gk.clear'), () => { gkCell = null; gkZone = null; render(); }) : null),
         h('div', { class: 'gk-cover muted small' }, covLine('save'), covLine('goal_against')),
         h('h3', { class: 'sub' }, t('gk.others')),
         h('div', { class: 'acts' }, [GK_BTNS[2], GK_BTNS[3], GK_BTNS[4], PEN_BTNS[2]].map((d) => ab(d, 'keeper'))),
@@ -354,6 +390,7 @@ export async function matchView(root, { id }) {
 
     const buttons = buildButtons();
     screen.replaceChildren(
+      clockBar,
       h('div', { class: 'subbar' },
         h('a', { class: 'icon-btn', href: '#/', 'aria-label': t('back') }, '←'),
         h('div', { class: 'title-block' }, h('h1', null, `${m.home_away === 'away' ? '@ ' : ''}${rival}`), h('span', { class: 'muted small' }, `${fmtDate(m.date)}${m.is_practice ? ' · ' + t('practice') : ''}`)),

@@ -223,6 +223,10 @@ export const D = {
   'tbl.players_detail': ['Jugadores · detalle', 'Jokalariak · xehetasuna'],
   'ps.matches': ['Partidos', 'Partidak'], 'ps.by_match': ['Partido a partido', 'Partidaz partida'],
   // --- importar hoja INPESCA
+  'clock.start': ['Empezar', 'Hasi'], 'clock.half2': ['2ª parte', '2. zatia'], 'clock.ot': ['Prórroga +5\'', 'Luzapena +5\''], 'clock.resume': ['Reanudar', 'Berrekin'], 'clock.pause': ['Parar', 'Gelditu'],
+  'clock.edit': ['Ajustar el tiempo', 'Denbora doitu'], 'clock.min': ['Minutos', 'Minutuak'], 'clock.sec': ['Segundos', 'Segundoak'], 'clock.reset': ['Reiniciar a 00:00', 'Berrezarri 00:00'],
+  'clock.reset_q': ['¿Reiniciar el cronómetro a 00:00?', 'Kronometroa 00:00ra berrezarri?'],
+  'clock.end_half': ['Fin de la 1ª parte', '1. zatiaren amaiera'], 'clock.end_full': ['Fin del tiempo reglamentario (60:00)', 'Denbora erregelamenduzkoaren amaiera (60:00)'], 'clock.end_ot': ['Fin de la prórroga', 'Luzapenaren amaiera'],
   'gk.step1': ['1 · Toca el cuadrado de la portería', '1 · Ukitu atearen laukia'],
   'gk.step2': ['Cuadrado {cell} ✓ · 2 · Ahora toca la zona de lanzamiento', '{cell}. laukia ✓ · 2 · Orain ukitu jaurtiketa eremua'],
   'gk.ready': ['Cuadrado {cell} · {zone} ✓ — ¿qué ha pasado?', '{cell}. laukia · {zone} ✓ — Zer gertatu da?'],
